@@ -55,6 +55,12 @@ describe("parseClaudeOutput", () => {
     expect(envelope.totalCostUsd).toBeUndefined();
   });
 
+  it("normalizes json-schema structured_output into the result body", () => {
+    const body = `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"ok"},"session_id":"${SESSION_ID}","total_cost_usd":0.01}`;
+    const envelope = parseClaudeOutput({ stdout: body, stderrTail: "", exitCode: 0 });
+    expect(envelope.result).toBe('{"answer":"ok"}');
+  });
+
   it("recovers the envelope from the last non-empty line when noise precedes it", () => {
     const noisy = `Warning: no stdin data received in 3s, proceeding without it.\n${SUCCESS_ENVELOPE}\n`;
     expect(parseClaudeOutput({ stdout: noisy, stderrTail: "", exitCode: 0 }).result).toBe("pong");

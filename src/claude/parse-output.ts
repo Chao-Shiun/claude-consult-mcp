@@ -23,6 +23,7 @@ const nullableNumberSchema = z.number().nullish();
 
 const envelopeSchema = z.object({
   result: z.string().optional(),
+  structured_output: z.unknown().optional(),
   session_id: z.string().optional(),
   is_error: z.boolean().optional(),
   subtype: z.string().nullish(),
@@ -97,11 +98,14 @@ export function parseClaudeOutput(raw: RawRunOutput): ClaudeEnvelope {
   if (data.is_error === true) {
     throwEnvelopeError(data);
   }
-  if (typeof data.result !== "string" || typeof data.session_id !== "string") {
+  const result = typeof data.result === "string" && data.result !== ""
+    ? data.result
+    : data.structured_output === undefined ? data.result : JSON.stringify(data.structured_output);
+  if (typeof result !== "string" || typeof data.session_id !== "string") {
     throw new ClaudeConsultError("CLAUDE_MALFORMED_OUTPUT", "claude envelope is missing result or session_id", "run `claude --version`; the JSON envelope shape may have changed in a newer CLI");
   }
   return Object.freeze({
-    result: data.result,
+    result,
     sessionId: data.session_id,
     isError: false,
     subtype: data.subtype ?? undefined,

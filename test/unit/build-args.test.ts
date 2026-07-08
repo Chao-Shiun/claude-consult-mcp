@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config.js";
 import { isClaudeConsultError } from "../../src/errors.js";
 import { buildClaudeArgs, isFableModel, resolveRunPolicy, type RunSpec } from "../../src/claude/build-args.js";
+import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -19,6 +20,7 @@ function baseSpec(overrides: Partial<RunSpec> = {}): RunSpec {
     effort: undefined,
     sessionId: undefined,
     appendSystemPrompt: undefined,
+    jsonSchema: undefined,
     budgetUsd: undefined,
     addDirs: [],
     ...overrides
@@ -51,6 +53,7 @@ describe("buildClaudeArgs", () => {
       effort: "max",
       sessionId: SESSION_ID,
       appendSystemPrompt: "advisor role text",
+      jsonSchema: VERDICT_JSON_SCHEMA,
       budgetUsd: 1.5,
       addDirs: [DIR_A, DIR_B]
     }));
@@ -61,6 +64,7 @@ describe("buildClaudeArgs", () => {
       "--effort", "max",
       "-r", SESSION_ID,
       "--append-system-prompt", "advisor role text",
+      "--json-schema", VERDICT_JSON_SCHEMA,
       "--max-budget-usd", "1.5",
       "--add-dir", DIR_A,
       "--add-dir", DIR_B
@@ -89,6 +93,13 @@ describe("buildClaudeArgs", () => {
   it("rejects non-positive budgets", () => {
     expectInvalidInput(() => buildClaudeArgs(baseSpec({ budgetUsd: 0 })), "budget");
     expectInvalidInput(() => buildClaudeArgs(baseSpec({ budgetUsd: -1 })), "budget");
+  });
+
+  it.each([
+    ["malformed", "{not json"],
+    ["oversized", JSON.stringify({ value: "x".repeat(8_200) })]
+  ])("rejects %s json schemas", (_label, jsonSchema) => {
+    expectInvalidInput(() => buildClaudeArgs(baseSpec({ jsonSchema })), "schema");
   });
 
   it("rejects forbidden or malformed tool tokens as defense in depth", () => {

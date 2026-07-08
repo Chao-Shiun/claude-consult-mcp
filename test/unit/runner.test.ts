@@ -5,6 +5,7 @@ import { createLogger } from "../../src/logger.js";
 import { createRunner, type RunnerDeps } from "../../src/claude/runner.js";
 import type { RawRunOutput, } from "../../src/claude/parse-output.js";
 import type { SpawnClaudeRequest } from "../../src/claude/spawn-claude.js";
+import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 
 const silentLogger = createLogger("silent", { write: () => true });
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
@@ -82,6 +83,14 @@ describe("createRunner", () => {
     expect(request?.cwd).toBe("C:\\proj");
     const args = request?.args ?? [];
     expect(args[args.indexOf("-r") + 1]).toBe(SESSION_ID);
+  });
+
+  it("passes a json schema into the child argv", async () => {
+    const harness = makeHarness();
+    const runner = createRunner(harness.deps);
+    await runner.run({ prompt: "structured", jsonSchema: VERDICT_JSON_SCHEMA });
+    const args = harness.spawnRequests[0]?.args ?? [];
+    expect(args[args.indexOf("--json-schema") + 1]).toBe(VERDICT_JSON_SCHEMA);
   });
 
   it("injects MAX_THINKING_TOKENS only when the cap is configured", async () => {

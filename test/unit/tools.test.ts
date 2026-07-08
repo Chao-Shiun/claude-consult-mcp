@@ -8,7 +8,7 @@ import type { RunnerRequest } from "../../src/claude/runner.js";
 import { ADVISOR_SYSTEM_PROMPT } from "../../src/tools/advisor-prompt.js";
 import type { ToolContext } from "../../src/tools/shared-schemas.js";
 import { createAskClaudeTool } from "../../src/tools/ask-claude.js";
-import { createSecondOpinionTool, CRITICAL_REVIEWER_PROMPT } from "../../src/tools/second-opinion.js";
+import { createSecondOpinionTool, CRITICAL_REVIEWER_PROMPT, VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 import { commonAncestor } from "../../src/tools/path-analysis.js";
 import { createReviewFilesTool } from "../../src/tools/review-files.js";
 import { createContinueSessionTool } from "../../src/tools/continue-session.js";
@@ -63,6 +63,7 @@ describe("ask_claude tool", () => {
     expect(requests[0]?.prompt).toBe("why is the sky blue?");
     expect(requests[0]?.appendSystemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
     expect(requests[0]?.cwd).toBeUndefined();
+    expect(requests[0]).not.toHaveProperty("jsonSchema");
   });
 
   it("wraps context in background tags and forwards common args", async () => {
@@ -101,6 +102,8 @@ describe("claude_second_opinion tool", () => {
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.appendSystemPrompt).toContain("Verdict");
     expect(request?.appendSystemPrompt).toContain("not to be agreeable");
+    expect(request?.jsonSchema).toBe(VERDICT_JSON_SCHEMA);
+    expect(tool.description).toContain("The result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown - parse it and gate your next action on verdict and confidence.");
   });
 });
 
@@ -126,6 +129,7 @@ describe("claude_review_files tool", () => {
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.addDirs).toEqual([base, subDir]);
     expect(request?.cwd).toBe(base);
+    expect(request).not.toHaveProperty("jsonSchema");
   });
 
   it("prefers an explicit workspace_dir as cwd", async () => {
@@ -190,6 +194,7 @@ describe("claude_continue tool", () => {
     expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.appendSystemPrompt).not.toContain("not to be agreeable");
+    expect(request).not.toHaveProperty("jsonSchema");
   });
 
   it("keeps a critical stance on adversarial review follow-ups", async () => {

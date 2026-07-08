@@ -14,6 +14,7 @@ export interface RunnerRequest {
   readonly model?: string | undefined;
   readonly sessionId?: string | undefined;
   readonly appendSystemPrompt?: string | undefined;
+  readonly jsonSchema?: string | undefined;
   readonly addDirs?: readonly string[] | undefined;
   readonly cwd?: string | undefined;
 }
@@ -64,6 +65,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       effort: policy.effort,
       sessionId: request.sessionId,
       appendSystemPrompt: request.appendSystemPrompt,
+      jsonSchema: request.jsonSchema,
       budgetUsd: policy.budgetUsd,
       addDirs: request.addDirs ?? []
     });

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, PATTERNS } from "../constants.js";
+import { EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, LIMITS, PATTERNS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 
@@ -19,6 +19,7 @@ export interface RunSpec {
   readonly effort: string | undefined;
   readonly sessionId: string | undefined;
   readonly appendSystemPrompt: string | undefined;
+  readonly jsonSchema: string | undefined;
   readonly budgetUsd: number | undefined;
   readonly addDirs: readonly string[];
 }
@@ -56,6 +57,18 @@ function validateTools(allowedTools: readonly string[]): void {
   }
 }
 
+function validateJsonSchema(jsonSchema: string): void {
+  const bytes = Buffer.byteLength(jsonSchema, "utf8");
+  if (bytes > LIMITS.jsonSchemaMaxBytes) {
+    invalid(`json schema is ${bytes} bytes which exceeds the ${LIMITS.jsonSchemaMaxBytes} byte limit`, "shorten the schema");
+  }
+  try {
+    JSON.parse(jsonSchema);
+  } catch {
+    invalid("json schema must parse as JSON", "pass a valid JSON Schema string");
+  }
+}
+
 export function buildClaudeArgs(spec: RunSpec): readonly string[] {
   validateTools(spec.allowedTools);
   const args: string[] = ["-p", "--output-format", "json", "--permission-mode", "default", "--allowedTools", spec.allowedTools.join(","), "--strict-mcp-config"];
@@ -79,6 +92,10 @@ export function buildClaudeArgs(spec: RunSpec): readonly string[] {
   }
   if (spec.appendSystemPrompt !== undefined) {
     args.push("--append-system-prompt", spec.appendSystemPrompt);
+  }
+  if (spec.jsonSchema !== undefined) {
+    validateJsonSchema(spec.jsonSchema);
+    args.push("--json-schema", spec.jsonSchema);
   }
   if (spec.budgetUsd !== undefined) {
     if (!Number.isFinite(spec.budgetUsd) || spec.budgetUsd <= 0) {
