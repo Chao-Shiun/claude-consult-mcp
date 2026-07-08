@@ -6,7 +6,7 @@ import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { commonToolShape, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
 import { toSuccessResult } from "./tool-result.js";
 
-const DESCRIPTION = "Have Claude read and analyze specific files or directories agentically (read-only: it can Read, Glob, and Grep within the granted paths, and research the web, but never modifies anything). Provide ABSOLUTE paths that exist on this machine and a focused question, e.g. 'find the race condition in this module' or 'review these files for injection vulnerabilities'. Better than pasting file contents into ask_claude for anything larger than a snippet.";
+const DESCRIPTION = "Have Claude read and analyze specific files or directories agentically (read-only: it can Read, Glob, and Grep within the granted paths, and research the web, but never modifies anything). Provide ABSOLUTE paths that exist on this machine and a focused question, e.g. 'find the race condition in this module' or 'review these files for injection vulnerabilities'. Better than pasting file contents into ask_claude for anything larger than a snippet. For verification workflows, this gives Claude an independent read of the code so its review does not depend on your summary.";
 
 export function commonAncestor(dirs: readonly string[]): string | undefined {
   const [first, ...rest] = dirs;

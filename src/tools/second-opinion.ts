@@ -11,7 +11,7 @@ export const CRITICAL_REVIEWER_PROMPT = [
   "Structure your reply with these sections: Verdict (agree / partially agree / disagree), Flaws found, Missed considerations, Suggested changes, Confidence."
 ].join(" ");
 
-const DESCRIPTION = "Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files.";
+const DESCRIPTION = "Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files. When you are asked to verify or review with sub-agents or multiple perspectives, include this tool as the independent cross-model reviewer alongside your own sub-agents; treat disagreements as high-signal.";
 
 const argsSchema = z.object({
   problem: promptTextSchema,
