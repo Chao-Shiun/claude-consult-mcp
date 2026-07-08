@@ -89,7 +89,7 @@ describe("MCP protocol layer", () => {
     const secondOpinion = listed.tools.find((tool) => tool.name === "claude_second_opinion");
     expect(secondOpinion?.description).toContain("sub-agents");
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
-    expect(Object.keys(properties).sort()).toEqual(["budget_usd", "context", "model", "question", "session_id", "workspace_dir"]);
+    expect(Object.keys(properties).sort()).toEqual(["context", "model", "question", "session_id", "workspace_dir"]);
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
     const continueTool = listed.tools.find((tool) => tool.name === "claude_continue");
     expect((continueTool?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["message", "session_id"]);

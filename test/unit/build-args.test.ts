@@ -135,16 +135,9 @@ describe("resolveRunPolicy", () => {
     expect(resolveRunPolicy(config, {}).budgetUsd).toBe(2);
   });
 
-  it("accepts a per-call budget at or below the cap and rejects above it", () => {
-    const config = loadConfig({ CLAUDE_CONSULT_MAX_BUDGET_USD: "2" });
-    expect(resolveRunPolicy(config, { budgetUsd: 1 }).budgetUsd).toBe(1);
-    expectInvalidInput(() => resolveRunPolicy(config, { budgetUsd: 3 }), "2");
-  });
-
-  it("accepts any positive per-call budget when no cap is set", () => {
+  it("leaves budget unset when no env cap is configured", () => {
     const config = loadConfig({});
-    expect(resolveRunPolicy(config, { budgetUsd: 5 }).budgetUsd).toBe(5);
-    expectInvalidInput(() => resolveRunPolicy(config, { budgetUsd: 0 }), "budget");
+    expect(resolveRunPolicy(config, {}).budgetUsd).toBeUndefined();
   });
 
   it("forces max effort for Fable models and leaves others unset", () => {

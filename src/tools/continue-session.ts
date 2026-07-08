@@ -9,8 +9,7 @@ const argsSchema = z.object({
   session_id: sessionIdSchema,
   message: promptTextSchema,
   workspace_dir: commonToolShape.workspace_dir,
-  model: commonToolShape.model,
-  budget_usd: commonToolShape.budget_usd
+  model: commonToolShape.model
 });
 
 export function createContinueSessionTool(toolContext: ToolContext): ConsultTool {
@@ -22,8 +21,7 @@ export function createContinueSessionTool(toolContext: ToolContext): ConsultTool
       session_id: sessionIdSchema.describe("The session_id printed at the end of a previous result."),
       message: promptTextSchema.describe("Your follow-up message for the same conversation."),
       workspace_dir: commonToolShape.workspace_dir,
-      model: commonToolShape.model,
-      budget_usd: commonToolShape.budget_usd
+      model: commonToolShape.model
     },
     execute: async (rawArgs: Record<string, unknown>) => {
       const args = argsSchema.parse(rawArgs);

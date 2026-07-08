@@ -71,7 +71,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_review_files` | Deep read-only review of real files/directories | `paths` (absolute, 1-32), `question` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
 
-All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session), `model`, `budget_usd`, and `session_id`.
+All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session), `model`, and `session_id`.
 
 Every successful result ends with a machine-readable footer:
 
@@ -84,7 +84,7 @@ Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks 
 
 ## Model and capability policy
 
-The machine owner sets policy ceilings via environment variables; Codex chooses per call **within** those ceilings and can never exceed them.
+The machine owner sets policy ceilings via environment variables; Codex chooses the model per call **within** those ceilings and can never exceed them.
 
 | Who decides | What | How |
 |---|---|---|
@@ -92,9 +92,11 @@ The machine owner sets policy ceilings via environment variables; Codex chooses 
 | Owner | Default model (`opus` out of the box) | `CLAUDE_CONSULT_MODEL` |
 | Owner | Model ceiling | `CLAUDE_CONSULT_ALLOWED_MODELS` (a single value locks the model completely) |
 | Codex (within the whitelist) | Per-call model | `model` tool argument |
-| Owner cap, Codex may go lower | Per-call budget | `CLAUDE_CONSULT_MAX_BUDGET_USD` + `budget_usd` argument |
+| Owner only | Optional budget cap | `CLAUDE_CONSULT_MAX_BUDGET_USD` |
 
 There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
+
+No budget cap is set by default because this package assumes a Claude subscription login with no marginal cost per run. Machines billed through an API key can opt into a spending guard by setting `CLAUDE_CONSULT_MAX_BUDGET_USD` or running `setup --max-budget-usd <n>`.
 
 ## Environment variables (all optional)
 
@@ -106,7 +108,7 @@ There is **no write tier**. The child claude process is only ever allowed `Read`
 | `CLAUDE_CONSULT_ALLOWED_MODELS` | unlimited | Comma-separated model whitelist ceiling |
 | `CLAUDE_CONSULT_CAPABILITY` | `research` | `readonly` or `research` |
 | `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override (never write-capable) |
-| `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Per-call spending cap (`--max-budget-usd`) |
+| `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
 | `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
 | `CLAUDE_CONSULT_LOG_LEVEL` | `info` | `silent` / `error` / `info` / `debug` (stderr only) |

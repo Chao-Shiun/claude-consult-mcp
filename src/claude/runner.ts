@@ -12,7 +12,6 @@ import { createDefaultSpawnDeps, spawnClaude, type SpawnClaudeRequest } from "./
 export interface RunnerRequest {
   readonly prompt: string;
   readonly model?: string | undefined;
-  readonly budgetUsd?: number | undefined;
   readonly sessionId?: string | undefined;
   readonly appendSystemPrompt?: string | undefined;
   readonly addDirs?: readonly string[] | undefined;
@@ -58,7 +57,7 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   const run = async (request: RunnerRequest): Promise<ClaudeEnvelope> => {
     validatePrompt(request.prompt);
-    const policy = resolveRunPolicy(deps.config, { model: request.model, budgetUsd: request.budgetUsd });
+    const policy = resolveRunPolicy(deps.config, { model: request.model });
     const args = buildClaudeArgs({
       allowedTools: deps.config.allowedTools,
       model: policy.model,

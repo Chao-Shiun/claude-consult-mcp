@@ -79,6 +79,11 @@ describe("parseClaudeOutput", () => {
     expectCode(() => parseClaudeOutput({ stdout: body, stderrTail: "", exitCode: 1 }), "CLAUDE_RESULT_ERROR", "error_during_execution");
   });
 
+  it("maps configured budget cap aborts to an actionable result error", () => {
+    const body = `{"type":"result","subtype":"error_max_budget_usd","is_error":true,"result":"","session_id":"${SESSION_ID}"}`;
+    expectCode(() => parseClaudeOutput({ stdout: body, stderrTail: "", exitCode: 1 }), "CLAUDE_RESULT_ERROR", "raise or unset CLAUDE_CONSULT_MAX_BUDGET_USD");
+  });
+
   it("maps unparseable stdout with a nonzero exit to CLAUDE_NONZERO_EXIT including the stderr tail", () => {
     expectCode(() => parseClaudeOutput({ stdout: "not json at all", stderrTail: "boom from stderr", exitCode: 2 }), "CLAUDE_NONZERO_EXIT", "boom from stderr");
   });

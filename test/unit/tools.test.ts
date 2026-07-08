@@ -63,13 +63,13 @@ describe("ask_claude tool", () => {
   it("wraps context in background tags and forwards common args", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
-    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", budget_usd: 0.5, session_id: SESSION_ID });
+    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", session_id: SESSION_ID });
     const request = requests[0];
     expect(request?.prompt).toBe("<background-context>\ntried X\n</background-context>\n\nq");
     expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.model).toBe("haiku");
-    expect(request?.budgetUsd).toBe(0.5);
     expect(request?.sessionId).toBe(SESSION_ID);
+    expect(request).not.toHaveProperty("budgetUsd");
   });
 
   it("rejects a missing question at the schema boundary", async () => {

@@ -5,7 +5,6 @@ import type { Config } from "../config.js";
 
 export interface RunPolicyRequest {
   readonly model?: string | undefined;
-  readonly budgetUsd?: number | undefined;
 }
 
 export interface RunPolicy {
@@ -40,15 +39,7 @@ export function resolveRunPolicy(config: Config, request: RunPolicyRequest): Run
   if (model !== undefined && config.allowedModels !== undefined && !config.allowedModels.includes(model)) {
     invalid(`model "${model}" is not allowed by ${ENV.allowedModels}`, `allowed models: ${config.allowedModels.join(", ")}`);
   }
-  if (request.budgetUsd !== undefined) {
-    if (!Number.isFinite(request.budgetUsd) || request.budgetUsd <= 0) {
-      invalid(`requested budget must be a positive number, got ${request.budgetUsd}`, "pass budget_usd greater than 0 or omit it");
-    }
-    if (config.maxBudgetUsd !== undefined && request.budgetUsd > config.maxBudgetUsd) {
-      invalid(`requested budget ${request.budgetUsd} exceeds the ${ENV.maxBudgetUsd} cap of ${config.maxBudgetUsd}`, `pass budget_usd at most ${config.maxBudgetUsd} or omit it to use the cap`);
-    }
-  }
-  return Object.freeze({ model, effort: isFableModel(model) ? "max" : undefined, budgetUsd: request.budgetUsd ?? config.maxBudgetUsd });
+  return Object.freeze({ model, effort: isFableModel(model) ? "max" : undefined, budgetUsd: config.maxBudgetUsd });
 }
 
 function validateTools(allowedTools: readonly string[]): void {
@@ -91,7 +82,7 @@ export function buildClaudeArgs(spec: RunSpec): readonly string[] {
   }
   if (spec.budgetUsd !== undefined) {
     if (!Number.isFinite(spec.budgetUsd) || spec.budgetUsd <= 0) {
-      invalid(`budget must be a positive number, got ${spec.budgetUsd}`, "pass budget_usd greater than 0 or omit it");
+      invalid(`budget must be a positive number, got ${spec.budgetUsd}`, `set ${ENV.maxBudgetUsd} to a positive number or unset it`);
     }
     args.push("--max-budget-usd", String(spec.budgetUsd));
   }

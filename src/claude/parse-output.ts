@@ -71,6 +71,9 @@ function throwUnparseable(raw: RawRunOutput): never {
 
 function throwEnvelopeError(data: z.infer<typeof envelopeSchema>): never {
   const text = data.result ?? "";
+  if (data.subtype === "error_max_budget_usd") {
+    throw new ClaudeConsultError("CLAUDE_RESULT_ERROR", "claude aborted the run because it exceeded the configured budget cap before finishing", "raise or unset CLAUDE_CONSULT_MAX_BUDGET_USD on this machine; subscription logins have no marginal cost to cap, and spend incurred before the abort is already consumed");
+  }
   if (data.api_error_status === 401 || AUTH_PATTERN.test(text)) {
     throw new ClaudeConsultError("CLAUDE_NOT_AUTHENTICATED", `claude is not authenticated: ${text}`, "run `claude` interactively once on this machine to log in");
   }
