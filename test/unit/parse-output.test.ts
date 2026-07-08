@@ -33,6 +33,28 @@ describe("parseClaudeOutput", () => {
     expect(Object.isFrozen(envelope)).toBe(true);
   });
 
+  it("tolerates null metric fields as emitted by claude 2.1.163 on success", () => {
+    // Captured from a real authenticated run: success envelopes carry
+    // api_error_status as JSON null rather than omitting the field.
+    const nullFieldsEnvelope = `{"type":"result","subtype":"success","is_error":false,"api_error_status":null,"duration_ms":15386,"duration_api_ms":10062,"ttft_ms":12967,"time_to_request_ms":3093,"num_turns":1,"result":"ok","stop_reason":"end_turn","session_id":"${SESSION_ID}","total_cost_usd":0.2822775,"usage":{"input_tokens":18473,"output_tokens":4}}`;
+    const envelope = parseClaudeOutput({ stdout: nullFieldsEnvelope, stderrTail: "", exitCode: 0 });
+    expect(envelope.result).toBe("ok");
+    expect(envelope.sessionId).toBe(SESSION_ID);
+    expect(envelope.apiErrorStatus).toBeUndefined();
+    expect(envelope.totalCostUsd).toBe(0.2822775);
+    expect(envelope.numTurns).toBe(1);
+  });
+
+  it("tolerates null in every defensive envelope field", () => {
+    const allNulls = `{"type":"result","subtype":null,"is_error":false,"api_error_status":null,"duration_ms":null,"num_turns":null,"result":"ok","session_id":"${SESSION_ID}","total_cost_usd":null}`;
+    const envelope = parseClaudeOutput({ stdout: allNulls, stderrTail: "", exitCode: 0 });
+    expect(envelope.result).toBe("ok");
+    expect(envelope.subtype).toBeUndefined();
+    expect(envelope.durationMs).toBeUndefined();
+    expect(envelope.numTurns).toBeUndefined();
+    expect(envelope.totalCostUsd).toBeUndefined();
+  });
+
   it("recovers the envelope from the last non-empty line when noise precedes it", () => {
     const noisy = `Warning: no stdin data received in 3s, proceeding without it.\n${SUCCESS_ENVELOPE}\n`;
     expect(parseClaudeOutput({ stdout: noisy, stderrTail: "", exitCode: 0 }).result).toBe("pong");

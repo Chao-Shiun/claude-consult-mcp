@@ -19,15 +19,17 @@ export interface ClaudeEnvelope {
   readonly numTurns: number | undefined;
 }
 
+const nullableNumberSchema = z.number().nullish();
+
 const envelopeSchema = z.object({
   result: z.string().optional(),
   session_id: z.string().optional(),
   is_error: z.boolean().optional(),
-  subtype: z.string().optional(),
-  api_error_status: z.number().optional(),
-  total_cost_usd: z.number().optional(),
-  duration_ms: z.number().optional(),
-  num_turns: z.number().optional()
+  subtype: z.string().nullish(),
+  api_error_status: nullableNumberSchema,
+  total_cost_usd: nullableNumberSchema,
+  duration_ms: nullableNumberSchema,
+  num_turns: nullableNumberSchema
 }).passthrough();
 
 const AUTH_PATTERN = /failed to authenticate|invalid authentication|invalid api key|please run \/login/i;
@@ -75,7 +77,7 @@ function throwEnvelopeError(data: z.infer<typeof envelopeSchema>): never {
   if (SESSION_PATTERN.test(text)) {
     throw new ClaudeConsultError("SESSION_NOT_FOUND", text, "pass the same workspace_dir as the original call so the session can be found");
   }
-  const subtype = data.subtype === undefined ? "" : ` (${data.subtype})`;
+  const subtype = data.subtype ? ` (${data.subtype})` : "";
   throw new ClaudeConsultError("CLAUDE_RESULT_ERROR", `claude reported an error${subtype}: ${text}`, "read the error text and adjust the request");
 }
 
@@ -99,10 +101,10 @@ export function parseClaudeOutput(raw: RawRunOutput): ClaudeEnvelope {
     result: data.result,
     sessionId: data.session_id,
     isError: false,
-    subtype: data.subtype,
-    apiErrorStatus: data.api_error_status,
-    totalCostUsd: data.total_cost_usd,
-    durationMs: data.duration_ms,
-    numTurns: data.num_turns
+    subtype: data.subtype ?? undefined,
+    apiErrorStatus: data.api_error_status ?? undefined,
+    totalCostUsd: data.total_cost_usd ?? undefined,
+    durationMs: data.duration_ms ?? undefined,
+    numTurns: data.num_turns ?? undefined
   });
 }
