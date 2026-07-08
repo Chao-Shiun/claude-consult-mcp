@@ -9,7 +9,8 @@ import { ADVISOR_SYSTEM_PROMPT } from "../../src/tools/advisor-prompt.js";
 import type { ToolContext } from "../../src/tools/shared-schemas.js";
 import { createAskClaudeTool } from "../../src/tools/ask-claude.js";
 import { createSecondOpinionTool } from "../../src/tools/second-opinion.js";
-import { commonAncestor, createReviewFilesTool } from "../../src/tools/review-files.js";
+import { commonAncestor } from "../../src/tools/path-analysis.js";
+import { createReviewFilesTool } from "../../src/tools/review-files.js";
 import { createContinueSessionTool } from "../../src/tools/continue-session.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
