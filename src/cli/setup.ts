@@ -1,5 +1,5 @@
 import { CAPABILITIES, CODEX_SERVER_ID, ENV, PATTERNS, SERVER_NAME } from "../constants.js";
-import type { CommandResult } from "./run-command.js";
+import type { CommandResult } from "../run-command.js";
 
 export interface SetupDeps {
   readonly platform: string;

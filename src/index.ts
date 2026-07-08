@@ -5,7 +5,7 @@ import { createDefaultRunner } from "./claude/runner.js";
 import { createServer } from "./server/create-server.js";
 import { runServer } from "./server/run-server.js";
 import { dispatch } from "./dispatch.js";
-import { runCommand } from "./cli/run-command.js";
+import { runCommand } from "./run-command.js";
 import { runSetup } from "./cli/setup.js";
 import { createDefaultDoctorDeps, runDoctor } from "./cli/doctor.js";
 

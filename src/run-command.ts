@@ -6,9 +6,13 @@ export interface CommandResult {
   readonly stderr: string;
 }
 
-export function runCommand(command: string, args: readonly string[]): Promise<CommandResult> {
+export interface RunCommandOptions {
+  readonly cwd?: string;
+}
+
+export function runCommand(command: string, args: readonly string[], options: RunCommandOptions = {}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = crossSpawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const child = crossSpawn(command, [...args], { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer | string) => {

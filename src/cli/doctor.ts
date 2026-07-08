@@ -6,7 +6,7 @@ import { loadConfig } from "../config.js";
 import { isClaudeConsultError, toDisplayText } from "../errors.js";
 import { createLogger } from "../logger.js";
 import { createDefaultRunner } from "../claude/runner.js";
-import { runCommand, type CommandResult } from "./run-command.js";
+import { runCommand, type CommandResult } from "../run-command.js";
 
 export interface LiveProbeResult {
   readonly ok: boolean;
