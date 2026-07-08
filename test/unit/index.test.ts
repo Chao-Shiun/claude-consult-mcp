@@ -45,7 +45,7 @@ describe("dispatch", () => {
     const { mains, lines } = makeMains();
     await expect(dispatch(["--version"], mains)).resolves.toBe(0);
     await expect(dispatch(["-v"], mains)).resolves.toBe(0);
-    expect(lines).toEqual(["0.1.1", "0.1.1"]);
+    expect(lines).toEqual(["0.2.0", "0.2.0"]);
   });
 
   it("prints usage for --help and returns nonzero for unknown commands", async () => {
