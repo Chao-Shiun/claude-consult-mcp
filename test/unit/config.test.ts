@@ -109,6 +109,12 @@ describe("loadConfig", () => {
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_BUDGET_USD: "abc" }), "CLAUDE_CONSULT_MAX_BUDGET_USD");
   });
 
+  it("rejects budgets and thinking caps that overflow to Infinity", () => {
+    const huge = "9".repeat(400);
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_BUDGET_USD: huge }), "CLAUDE_CONSULT_MAX_BUDGET_USD");
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_THINKING_TOKENS: huge }), "CLAUDE_CONSULT_MAX_THINKING_TOKENS");
+  });
+
   it("rejects non-positive or non-integer thinking token caps", () => {
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_THINKING_TOKENS: "0" }), "CLAUDE_CONSULT_MAX_THINKING_TOKENS");
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_THINKING_TOKENS: "1.5" }), "CLAUDE_CONSULT_MAX_THINKING_TOKENS");

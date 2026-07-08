@@ -49,10 +49,11 @@ function parsePositiveNumber(env: Env, name: string): number | undefined {
   if (raw === undefined) {
     return undefined;
   }
-  if (!/^\d+(\.\d+)?$/.test(raw) || Number(raw) <= 0) {
-    fail(name, `must be a positive number, got "${raw}"`, `set ${name} to a positive number or unset it for no limit`);
+  const value = Number(raw);
+  if (!/^\d+(\.\d+)?$/.test(raw) || !Number.isFinite(value) || value <= 0) {
+    fail(name, `must be a positive finite number, got "${raw}"`, `set ${name} to a positive number or unset it for no limit`);
   }
-  return Number(raw);
+  return value;
 }
 
 function parsePositiveInt(env: Env, name: string): number | undefined {
@@ -60,10 +61,11 @@ function parsePositiveInt(env: Env, name: string): number | undefined {
   if (raw === undefined) {
     return undefined;
   }
-  if (!/^\d+$/.test(raw) || Number(raw) <= 0) {
-    fail(name, `must be a positive integer, got "${raw}"`, `set ${name} to a positive integer or unset it for no limit`);
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isFinite(value) || value <= 0) {
+    fail(name, `must be a positive finite integer, got "${raw}"`, `set ${name} to a positive integer or unset it for no limit`);
   }
-  return Number(raw);
+  return value;
 }
 
 function parseChoice<T extends string>(env: Env, name: string, choices: readonly T[], fallback: T): T {
