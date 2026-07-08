@@ -142,11 +142,11 @@ describe("createRunner", () => {
     const runner = createRunner(harness.deps);
     const pending = runner.run({ prompt: "long analysis" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    runner.killInFlight();
+    expect(runner.killInFlight()).toBe(1);
     expect(kills).toEqual(["long analysis"]);
     finish?.();
     await pending;
-    runner.killInFlight();
+    expect(runner.killInFlight()).toBe(0);
     expect(kills).toEqual(["long analysis"]);
   });
 

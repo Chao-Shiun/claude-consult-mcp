@@ -23,7 +23,7 @@ export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
 
 export interface Runner {
   readonly run: RunClaude;
-  readonly killInFlight: () => void;
+  readonly killInFlight: () => number;
 }
 
 export interface RunnerDeps {
@@ -85,10 +85,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     return parseClaudeOutput(raw);
   };
 
-  const killInFlight = (): void => {
-    for (const kill of [...inFlight]) {
+  const killInFlight = (): number => {
+    const pending = [...inFlight];
+    for (const kill of pending) {
       kill();
     }
+    return pending.length;
   };
 
   return Object.freeze({ run, killInFlight });
