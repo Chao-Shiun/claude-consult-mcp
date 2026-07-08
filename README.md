@@ -121,6 +121,11 @@ Set them at registration time so they live in the Codex config: `npx -y claude-c
 - No credentials are stored, read, or transmitted by this package; the claude CLI uses its own login on each machine.
 - Diagnostics go to stderr only; stdout is reserved for the MCP protocol.
 - On timeout or shutdown the whole claude process tree is terminated (taskkill on Windows, process-group signals on POSIX) so no orphan processes are left behind.
+- UNC and device paths (`\\host\share`, `\\?\...`, `//server/share`) are rejected before any filesystem access, so a prompt-injected Codex cannot use `claude_review_files` to force NTLM authentication to a remote host.
+
+### File-read scope
+
+`claude_review_files` grants Claude read access (Read/Glob/Grep) to the paths you pass, so it can read **any file the OS user running Codex can read** — this is the feature, but it is also its blast radius. Because a prompt-injected Codex could target sensitive paths (`~/.ssh`, `~/.aws`, `.env` files, browser credential stores), treat the tool's reach as equal to that user account's read permissions. If that is a concern in your environment, run Codex (and therefore this server) under a least-privilege account, and only approve `claude_review_files` calls whose paths you recognize.
 
 ## Troubleshooting
 

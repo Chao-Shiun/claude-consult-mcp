@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { commonToolShape, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
 
 export const CRITICAL_REVIEWER_PROMPT = [
   "You are a critical second reviewer. Another AI coding agent produced the analysis under review.",
@@ -13,8 +13,8 @@ export const CRITICAL_REVIEWER_PROMPT = [
 const DESCRIPTION = "Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files.";
 
 const argsSchema = z.object({
-  problem: z.string().min(1),
-  analysis: z.string().min(1),
+  problem: promptTextSchema,
+  analysis: promptTextSchema,
   ...commonToolShape
 });
 
@@ -24,8 +24,8 @@ export function createSecondOpinionTool(toolContext: ToolContext): ConsultTool {
     title: "Claude Second Opinion",
     description: DESCRIPTION,
     inputSchema: {
-      problem: z.string().min(1).describe("Neutral statement of the problem or task being solved."),
-      analysis: z.string().min(1).describe("Your analysis, conclusion, or plan to be critiqued - include the reasoning, not just the answer."),
+      problem: promptTextSchema.describe("Neutral statement of the problem or task being solved."),
+      analysis: promptTextSchema.describe("Your analysis, conclusion, or plan to be critiqued - include the reasoning, not just the answer."),
       ...commonToolShape
     },
     execute: async (rawArgs: Record<string, unknown>) => {
