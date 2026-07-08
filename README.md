@@ -1,0 +1,151 @@
+# claude-consult-mcp
+
+Let OpenAI Codex (CLI and desktop app) consult your local **Claude Code** while it analyzes problems: co-analysis, adversarial second opinions, and read-only file review — over the Model Context Protocol.
+
+Claude is **advisory only** by design: it reads files and researches the web, but it can never modify anything. Implementation always stays with Codex.
+
+```
+Codex CLI / Desktop app  (shared ~/.codex/config.toml)
+   |  spawns: cmd /c npx -y claude-consult-mcp   (Windows)
+   |          npx -y claude-consult-mcp          (macOS / Linux)
+   v
+MCP stdio server (this package)
+   |  4 tools, zod-validated, read-only allowlist, injection-hardened argv
+   v
+claude -p --output-format json   (your existing Claude Code login)
+```
+
+Verified against: Claude Code CLI `2.1.163`, Codex CLI `0.142.0`, MCP SDK `1.x`.
+
+## Prerequisites
+
+- Node.js >= 20
+- [Claude Code](https://www.anthropic.com/claude-code) installed and logged in on each machine: `npm install -g @anthropic-ai/claude-code`, then run `claude` once
+- Codex CLI >= 0.142 (`npm install -g @openai/codex`) and/or the Codex desktop app
+
+## Quick start
+
+```bash
+npx -y claude-consult-mcp setup
+```
+
+That runs the platform-correct `codex mcp add` for you (on Windows it wraps the launcher in `cmd /c`, which Codex requires for npx-based servers). Then add the recommended timeouts to `~/.codex/config.toml` under the server section — `codex mcp add` has no flags for them:
+
+```toml
+[mcp_servers.claude-consult]
+startup_timeout_sec = 60
+tool_timeout_sec = 600
+```
+
+Restart the Codex desktop app so it picks up the new server. Verify with:
+
+```bash
+npx -y claude-consult-mcp doctor          # environment checks (free)
+npx -y claude-consult-mcp doctor --live   # plus one real claude call (costs tokens)
+codex mcp list
+```
+
+### Manual registration
+
+```bash
+# Windows
+codex mcp add claude-consult -- cmd /c npx -y claude-consult-mcp
+
+# macOS / Linux
+codex mcp add claude-consult -- npx -y claude-consult-mcp
+```
+
+### 快速開始（繁體中文）
+
+1. 每台機器先安裝並登入 Claude Code：`npm install -g @anthropic-ai/claude-code`，執行一次 `claude` 完成登入
+2. 執行 `npx -y claude-consult-mcp setup` 自動註冊進 Codex（Windows 會自動加上 `cmd /c` 包裝）
+3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
+4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
+
+## The four tools
+
+| Tool | Use it for | Required args |
+|---|---|---|
+| `ask_claude` | General co-analysis, an independent expert view | `question` (+ optional `context`) |
+| `claude_second_opinion` | Adversarial critique of Codex's own analysis before acting on it | `problem`, `analysis` |
+| `claude_review_files` | Deep read-only review of real files/directories | `paths` (absolute, 1-32), `question` |
+| `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
+
+All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session), `model`, `budget_usd`, and `session_id`.
+
+Every successful result ends with a machine-readable footer:
+
+```
+---
+[claude-consult] session_id: <uuid> | cost_usd: 0.12 | duration_ms: 3400 | turns: 2
+```
+
+Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
+
+## Model and capability policy
+
+The machine owner sets policy ceilings via environment variables; Codex chooses per call **within** those ceilings and can never exceed them.
+
+| Who decides | What | How |
+|---|---|---|
+| Owner only | Capability tier (`readonly` / `research`) | `CLAUDE_CONSULT_CAPABILITY` — not exposed as a tool argument, so Codex cannot self-escalate |
+| Owner | Default model (`opus` out of the box) | `CLAUDE_CONSULT_MODEL` |
+| Owner | Model ceiling | `CLAUDE_CONSULT_ALLOWED_MODELS` (a single value locks the model completely) |
+| Codex (within the whitelist) | Per-call model | `model` tool argument |
+| Owner cap, Codex may go lower | Per-call budget | `CLAUDE_CONSULT_MAX_BUDGET_USD` + `budget_usd` argument |
+
+There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
+
+## Environment variables (all optional)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CLAUDE_CONSULT_CLAUDE_BIN` | auto-detect on PATH | Full path to the claude binary |
+| `CLAUDE_CONSULT_TIMEOUT_MS` | `600000` | Per-call timeout (5000..1200000) |
+| `CLAUDE_CONSULT_MODEL` | `opus` | Default model; empty string = follow the claude CLI default |
+| `CLAUDE_CONSULT_ALLOWED_MODELS` | unlimited | Comma-separated model whitelist ceiling |
+| `CLAUDE_CONSULT_CAPABILITY` | `research` | `readonly` or `research` |
+| `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override (never write-capable) |
+| `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Per-call spending cap (`--max-budget-usd`) |
+| `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
+| `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
+| `CLAUDE_CONSULT_LOG_LEVEL` | `info` | `silent` / `error` / `info` / `debug` (stderr only) |
+
+Set them at registration time so they live in the Codex config: `npx -y claude-consult-mcp setup --model sonnet --capability readonly --allowed-models sonnet,haiku --max-budget-usd 1`.
+
+## Security notes
+
+- Read-only by design: no write-capable tool can ever reach the child process; permission mode is never bypassed.
+- The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
+- `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
+- No credentials are stored, read, or transmitted by this package; the claude CLI uses its own login on each machine.
+- Diagnostics go to stderr only; stdout is reserved for the MCP protocol.
+- On timeout or shutdown the whole claude process tree is terminated (taskkill on Windows, process-group signals on POSIX) so no orphan processes are left behind.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `[CLAUDE_NOT_FOUND]` | Install Claude Code (`npm install -g @anthropic-ai/claude-code`) or set `CLAUDE_CONSULT_CLAUDE_BIN` |
+| `[CLAUDE_NOT_AUTHENTICATED]` | Run `claude` interactively once on that machine to log in |
+| `[SESSION_NOT_FOUND]` on `claude_continue` | Pass the same `workspace_dir` as the original call — sessions are keyed by working directory |
+| Calls die around 60s | Raise `tool_timeout_sec` for this server in `~/.codex/config.toml` (setup prints the snippet) |
+| `[CLAUDE_TIMEOUT]` | Raise `CLAUDE_CONSULT_TIMEOUT_MS` (default 600000) |
+| Server never starts on Windows | The registration must launch `cmd /c npx ...`; run `doctor` to detect this, or re-run `setup` |
+| Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
+| Uninstall | `codex mcp remove claude-consult` |
+
+## Development
+
+```bash
+npm ci
+npm run typecheck
+npm run build
+npm test                 # unit + protocol + stdio E2E (needs a build)
+npm run test:coverage    # 80% gate
+CLAUDE_CONSULT_E2E=1 npx vitest run test/integration   # real claude round-trip (costs tokens)
+```
+
+## License
+
+MIT
