@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import { ClaudeConsultError } from "../../src/errors.js";
+import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
+import { toErrorResult, toSuccessResult } from "../../src/server/tool-result.js";
+
+const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+
+function envelope(overrides: Partial<ClaudeEnvelope> = {}): ClaudeEnvelope {
+  return {
+    result: "the answer",
+    sessionId: SESSION_ID,
+    isError: false,
+    subtype: undefined,
+    apiErrorStatus: undefined,
+    totalCostUsd: 0.12,
+    durationMs: 3400,
+    numTurns: 2,
+    ...overrides
+  };
+}
+
+describe("toSuccessResult", () => {
+  it("appends the machine-readable footer in the fixed format", () => {
+    const result = toSuccessResult(envelope());
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`);
+  });
+
+  it("renders missing metrics as n/a", () => {
+    const result = toSuccessResult(envelope({ totalCostUsd: undefined, durationMs: undefined, numTurns: undefined }));
+    expect(result.content[0]?.text).toContain(`session_id: ${SESSION_ID} | cost_usd: n/a | duration_ms: n/a | turns: n/a`);
+  });
+});
+
+describe("toErrorResult", () => {
+  it("renders taxonomy errors with code and hint", () => {
+    const result = toErrorResult(new ClaudeConsultError("CLAUDE_TIMEOUT", "run exceeded 600000 ms", "raise the timeout"));
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe("[CLAUDE_TIMEOUT] run exceeded 600000 ms\nHint: raise the timeout");
+  });
+
+  it("hides details of unexpected exceptions behind INTERNAL_ERROR", () => {
+    const result = toErrorResult(new Error("secret database password"));
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("[INTERNAL_ERROR]");
+    expect(result.content[0]?.text).not.toContain("secret database password");
+  });
+});
