@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const DIST_ENTRY = path.resolve(process.cwd(), "dist", "index.js");
 
 describe.skipIf(!existsSync(DIST_ENTRY))("stdio transport end to end", () => {
-  it("spawns the built binary and lists the six tools over real stdio", async () => {
+  it("spawns the built binary and lists the eight tools over real stdio", async () => {
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [DIST_ENTRY],
@@ -18,7 +18,7 @@ describe.skipIf(!existsSync(DIST_ENTRY))("stdio transport end to end", () => {
       await client.connect(transport);
       const listed = await client.listTools();
       const names = listed.tools.map((tool) => tool.name).sort();
-      expect(names).toEqual(["ask_claude", "claude_continue", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
+      expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
     } finally {
       await client.close();
     }

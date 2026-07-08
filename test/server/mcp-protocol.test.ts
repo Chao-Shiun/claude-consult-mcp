@@ -97,11 +97,11 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
   });
 
-  it("lists exactly the six consult tools with steering schemas", async () => {
+  it("lists exactly the eight consult tools with steering schemas", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_continue", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
+    expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
     const ask = listed.tools.find((tool) => tool.name === "ask_claude");
     expect(ask?.description).toContain("advisory only");
     expect(ask?.description).toContain("claude_panel");
@@ -123,6 +123,9 @@ describe("MCP protocol layer", () => {
     const perspectives = panelProperties.perspectives as { items?: { enum?: string[] } };
     expect(perspectives.items?.enum).toEqual(["correctness", "security", "performance", "simplicity", "architecture", "testing"]);
     expect((panel?.inputSchema as { required?: string[] }).required).toEqual(["task"]);
+    const debateOpen = listed.tools.find((tool) => tool.name === "claude_debate_open");
+    expect(debateOpen?.description).toContain("Open a structured, evidence-based debate");
+    expect((debateOpen?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["evidence", "position", "topic", "workspace_dir"]);
   });
 
   it("returns the answer with the footer on a successful call", async () => {
