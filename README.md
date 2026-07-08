@@ -10,7 +10,7 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  6 tools, zod-validated, read-only allowlist, injection-hardened argv
+   |  8 tools, zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
 ```
@@ -62,7 +62,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The six tools
+## The eight tools
 
 | Tool | Use it for | Required args |
 |---|---|---|
@@ -70,6 +70,8 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_second_opinion` | Adversarial critique of Codex's own analysis before acting on it | `problem`, `analysis` |
 | `claude_review_files` | Deep read-only review of real files/directories | `paths` (absolute, 1-32), `question` |
 | `claude_review_diff` | Review actual git changes with diff/status context and repo read access | `workspace_dir` |
+| `claude_debate_open` | Structured evidence debate for significant decisions; Claude verifies caller evidence and returns per-claim rulings | `topic`, `position`, `evidence`, `workspace_dir` |
+| `claude_debate_reply` | Continue a debate round by accepting or rebutting Claude's rulings with new evidence | `session_id`, `workspace_dir`, `responses` |
 | `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
 
@@ -108,19 +110,36 @@ For implemented changes, use `claude_review_diff` so Claude reviews the actual g
 
 Example Codex prompt: `"Verify this plan with claude_panel using the security and correctness perspectives."`
 
+### Evidence debate workflow
+
+Use `claude_debate_open` for high-impact architecture, migration, or security decisions where a simple second opinion would collapse too much nuance into agree/disagree. Bring a position plus evidence items: file refs such as `src/cache.ts:40-60`, URLs, captured command output, or reasoning. For file refs, the server extracts neutral snippets from inside `workspace_dir` and embeds them in the user prompt so both sides argue over the same bytes; out-of-tree, UNC, device, or oversized exhibit reads become unavailable exhibits rather than expanding file access.
+
+Typical two-round sketch:
+
+1. Open: Codex calls `claude_debate_open` with the decision, current position, and supporting evidence. Claude returns JSON with `claim_verifications`, `counter_claims`, `concessions`, `remaining_disputes`, `verdict`, `confidence`, and `summary_markdown`.
+2. Reply: Codex verifies Claude's cited evidence, then calls `claude_debate_reply` with `accept` for persuasive rulings and `rebut` plus new evidence for contested claims. Stop when `remaining_disputes` is empty or after three rounds; report the per-claim outcome to the user.
+
+Debate tools are deliberately slow and expensive compared with `ask_claude`; use them for decisions where convergence and claim-by-claim evidence matter.
+
+### Deep research depth
+
+`claude_review_files` and `claude_review_diff` accept `depth: "deep"` when the machine owner has set `CLAUDE_CONSULT_CAPABILITY=deep-research`. Deep mode allows Claude to delegate read-only exploration to sub-agents for large scopes, then synthesize the result itself. It is slower and can use several times the turns of a standard review, so reserve it for broad audits, large directories, and risky changes.
+
+Safety probe statement: before enabling this release, the `Task` sub-agent token was verified with a real haiku probe on Claude Code CLI `2.1.163`; a sub-agent write attempt could not create `probe.txt` and was blocked by the default permission flow. If your local Claude Code behavior differs, keep `CLAUDE_CONSULT_CAPABILITY` at the default `research`.
+
 ## Model and capability policy
 
 The machine owner sets policy ceilings via environment variables; Codex chooses the model per call **within** those ceilings and can never exceed them.
 
 | Who decides | What | How |
 |---|---|---|
-| Owner only | Capability tier (`readonly` / `research`) | `CLAUDE_CONSULT_CAPABILITY` — not exposed as a tool argument, so Codex cannot self-escalate |
+| Owner only | Capability tier (`readonly` / `research` / `deep-research`) | `CLAUDE_CONSULT_CAPABILITY` — not exposed as a tool argument, so Codex cannot self-escalate |
 | Owner | Default model (`opus` out of the box) | `CLAUDE_CONSULT_MODEL` |
 | Owner | Model ceiling | `CLAUDE_CONSULT_ALLOWED_MODELS` (a single value locks the model completely) |
 | Codex (within the whitelist) | Per-call model | `model` tool argument |
 | Owner only | Optional budget cap | `CLAUDE_CONSULT_MAX_BUDGET_USD` |
 
-There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
+There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Task` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
 
 No budget cap is set by default because this package assumes a Claude subscription login with no marginal cost per run. Machines billed through an API key can opt into a spending guard by setting `CLAUDE_CONSULT_MAX_BUDGET_USD` or running `setup --max-budget-usd <n>`.
 
@@ -132,7 +151,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_TIMEOUT_MS` | `600000` | Per-call timeout (5000..1200000) |
 | `CLAUDE_CONSULT_MODEL` | `opus` | Default model; empty string = follow the claude CLI default |
 | `CLAUDE_CONSULT_ALLOWED_MODELS` | unlimited | Comma-separated model whitelist ceiling |
-| `CLAUDE_CONSULT_CAPABILITY` | `research` | `readonly` or `research` |
+| `CLAUDE_CONSULT_CAPABILITY` | `research` | `readonly`, `research`, or `deep-research` |
 | `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override (never write-capable) |
 | `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
@@ -144,6 +163,7 @@ Set them at registration time so they live in the Codex config: `npx -y claude-c
 ## Security notes
 
 - Read-only by design: no write-capable tool can ever reach the child process; permission mode is never bypassed.
+- The `deep-research` tier adds only the verified `Task` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
 - The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
 - No credentials are stored, read, or transmitted by this package; the claude CLI uses its own login on each machine.
