@@ -72,6 +72,12 @@ describe("MCP protocol layer", () => {
     await harness?.close();
   });
 
+  it("exposes server instructions to connected clients", async () => {
+    harness = await startHarness();
+    expect(harness.client.getInstructions()).toContain("independent cross-model");
+    expect(harness.client.getInstructions()).toContain("claude_panel");
+  });
+
   it("lists exactly the four consult tools with steering schemas", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();

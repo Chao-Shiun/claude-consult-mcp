@@ -14,8 +14,16 @@ export interface ServerDeps {
   readonly logger: Logger;
 }
 
+export const SERVER_INSTRUCTIONS = [
+  "claude-consult-mcp exposes Claude Code (Anthropic's coding agent) as an independent cross-model advisor.",
+  "Claude is advisory only: it reads files and researches, but never modifies anything; the caller implements all changes.",
+  "When the user asks to verify, review, or validate work - especially with sub-agents or multiple perspectives - include Claude as an independent cross-model reviewer: call claude_second_opinion for plans or conclusions, claude_review_files for code on disk, or claude_panel for a one-call multi-perspective review.",
+  "Treat disagreements between Claude and your own analysis or sub-agents as high-signal; investigate before dismissing either side.",
+  "Every successful result ends with a session_id footer; pass it to claude_continue to keep the same conversation going."
+].join(" ");
+
 export function createServer(deps: ServerDeps): McpServer {
-  const server = new McpServer({ name: SERVER_NAME, version: VERSION });
+  const server = new McpServer({ name: SERVER_NAME, version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
   const context: ToolContext = { runClaude: deps.runClaude };
   const tools: readonly ConsultTool[] = [
     createAskClaudeTool(context),
