@@ -73,6 +73,11 @@ describe("buildClaudeArgs", () => {
     expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: ["src"] })), "absolute");
   });
 
+  it("rejects UNC and device add-dir paths as defense in depth", () => {
+    expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: ["\\\\host\\share"] })), "UNC");
+    expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: ["\\\\?\\C:\\Windows"] })), "UNC");
+  });
+
   it("rejects non-positive budgets", () => {
     expectInvalidInput(() => buildClaudeArgs(baseSpec({ budgetUsd: 0 })), "budget");
     expectInvalidInput(() => buildClaudeArgs(baseSpec({ budgetUsd: -1 })), "budget");

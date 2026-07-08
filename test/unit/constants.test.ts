@@ -90,6 +90,14 @@ describe("constants", () => {
     expect(PATTERNS.model.test(`m${"x".repeat(64)}`)).toBe(false);
   });
 
+  it("flags UNC and device paths so they can be rejected", () => {
+    expect(PATTERNS.uncOrDevice.test("\\\\attacker\\share\\x")).toBe(true);
+    expect(PATTERNS.uncOrDevice.test("\\\\?\\C:\\Windows")).toBe(true);
+    expect(PATTERNS.uncOrDevice.test("//server/share")).toBe(true);
+    expect(PATTERNS.uncOrDevice.test("C:\\Users\\me")).toBe(false);
+    expect(PATTERNS.uncOrDevice.test("/home/me")).toBe(false);
+  });
+
   it("validates tool tokens as identifier-like names", () => {
     expect(PATTERNS.toolToken.test("Read")).toBe(true);
     expect(PATTERNS.toolToken.test("WebSearch")).toBe(true);

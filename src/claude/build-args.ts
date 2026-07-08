@@ -99,6 +99,9 @@ export function buildClaudeArgs(spec: RunSpec): readonly string[] {
     if (!path.isAbsolute(dir)) {
       invalid(`add-dir path must be absolute, got "${dir}"`, "pass absolute directory paths only");
     }
+    if (PATTERNS.uncOrDevice.test(dir)) {
+      invalid(`add-dir path must not be a UNC or device path, got "${dir}"`, "pass a local absolute path such as C:\\project or /home/user/project");
+    }
     args.push("--add-dir", dir);
   }
   return Object.freeze(args);

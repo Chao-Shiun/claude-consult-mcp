@@ -73,5 +73,9 @@ export const FORBIDDEN_TOOLS = deepFreeze(["Write", "Edit", "NotebookEdit", "Bas
 export const PATTERNS = deepFreeze({
   sessionId: /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
   model: /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/,
-  toolToken: /^[A-Za-z][A-Za-z0-9_]*$/
+  toolToken: /^[A-Za-z][A-Za-z0-9_]*$/,
+  // Two leading separators mark a Windows UNC path (\\host\share) or a device
+  // path (\\.\, \\?\), or a POSIX //-prefixed path. Reading any of these can
+  // force NTLM authentication to a remote host, so they are always rejected.
+  uncOrDevice: /^[\\/]{2}/
 });

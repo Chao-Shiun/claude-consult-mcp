@@ -8,9 +8,15 @@ export const sessionIdSchema = z.string().regex(PATTERNS.sessionId, { message: "
 
 export const modelSchema = z.string().regex(PATTERNS.model, { message: "model must be an alias like opus, sonnet, haiku, or a full model id" });
 
-export const budgetUsdSchema = z.number().positive({ message: "budget_usd must be a positive number" });
+export const budgetUsdSchema = z.number().positive({ message: "budget_usd must be a positive number" }).finite({ message: "budget_usd must be finite" });
 
-export const absolutePathSchema = z.string().min(1).refine((value) => path.isAbsolute(value), { message: "path must be absolute" });
+// Cap free-text tool inputs at the schema boundary so oversized payloads are
+// rejected during parsing instead of after being fully buffered and parsed.
+export const promptTextSchema = z.string().min(1).max(LIMITS.promptMaxBytes, { message: `text must be at most ${LIMITS.promptMaxBytes} characters` });
+
+export const absolutePathSchema = z.string().min(1)
+  .refine((value) => path.isAbsolute(value), { message: "path must be absolute" })
+  .refine((value) => !PATTERNS.uncOrDevice.test(value), { message: "UNC and device paths are not allowed" });
 
 export const pathsSchema = z.array(absolutePathSchema).min(1).max(LIMITS.pathsMax);
 

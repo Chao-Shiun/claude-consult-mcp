@@ -141,6 +141,18 @@ describe("claude_review_files tool", () => {
     expect(commonAncestor(["C:\\repo\\src", "C:\\repo\\src"])).toBe("C:\\repo\\src");
     expect(commonAncestor(["C:\\a", "D:\\b"])).toBeUndefined();
   });
+
+  it("does not widen the cwd to a drive root or empty path", () => {
+    expect(commonAncestor(["C:\\Users\\Alice\\foo", "C:\\Windows\\System32"])).toBeUndefined();
+    expect(commonAncestor(["/etc/xxx", "/home/victim/yyy"])).toBeUndefined();
+  });
+
+  it("rejects UNC paths at the schema boundary before touching the filesystem", async () => {
+    const { requests, context } = makeContext();
+    const tool = createReviewFilesTool(context);
+    await expect(tool.execute({ paths: ["\\\\attacker\\share\\x"], question: "q" })).rejects.toBeDefined();
+    expect(requests).toHaveLength(0);
+  });
 });
 
 describe("claude_continue tool", () => {
