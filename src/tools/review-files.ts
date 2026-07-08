@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { ClaudeConsultError } from "../errors.js";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { commonToolShape, pathsSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
 
 const DESCRIPTION = "Have Claude read and analyze specific files or directories agentically (read-only: it can Read, Glob, and Grep within the granted paths, and research the web, but never modifies anything). Provide ABSOLUTE paths that exist on this machine and a focused question, e.g. 'find the race condition in this module' or 'review these files for injection vulnerabilities'. Better than pasting file contents into ask_claude for anything larger than a snippet.";
 
@@ -26,12 +26,19 @@ export function commonAncestor(dirs: readonly string[]): string | undefined {
     }
   }
   const joined = prefixParts.join(separator);
-  return /^[A-Za-z]:$/.test(joined) ? `${joined}${separator}` : joined;
+  // An empty result (POSIX paths sharing only "/") or a bare drive letter
+  // (Windows paths sharing only "C:") is not a meaningful ancestor. Returning
+  // undefined lets the caller fall back to a specific path instead of widening
+  // the working directory to a filesystem or drive root.
+  if (joined === "" || /^[A-Za-z]:$/.test(joined)) {
+    return undefined;
+  }
+  return joined;
 }
 
 const argsSchema = z.object({
   paths: pathsSchema,
-  question: z.string().min(1),
+  question: promptTextSchema,
   ...commonToolShape
 });
 
@@ -58,7 +65,7 @@ export function createReviewFilesTool(toolContext: ToolContext): ConsultTool {
     description: DESCRIPTION,
     inputSchema: {
       paths: pathsSchema.describe("Absolute paths of files or directories to analyze (1-32). Every path must exist on this machine."),
-      question: z.string().min(1).describe("What to look for or evaluate in these paths."),
+      question: promptTextSchema.describe("What to look for or evaluate in these paths."),
       ...commonToolShape
     },
     execute: async (rawArgs: Record<string, unknown>) => {
