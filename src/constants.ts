@@ -12,7 +12,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 export const SERVER_NAME = "claude-consult-mcp";
 export const CODEX_SERVER_ID = "claude-consult";
 export const FOOTER_PREFIX = "[claude-consult]";
