@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { commonToolShape, promptTextSchema, sessionIdSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { toSuccessResult } from "./tool-result.js";
 
 const DESCRIPTION = "Continue an existing Claude conversation. Pass the session_id printed at the end of a previous result plus your follow-up message. Use the same workspace_dir as the original call, or the session will not be found.";
 
@@ -26,7 +27,7 @@ export function createContinueSessionTool(toolContext: ToolContext): ConsultTool
     },
     execute: async (rawArgs: Record<string, unknown>) => {
       const args = argsSchema.parse(rawArgs);
-      return toolContext.runClaude({ prompt: args.message, appendSystemPrompt: composeAdvisorPrompt(), addDirs: [], ...toRunnerBase({ ...args, session_id: args.session_id }) });
+      return toSuccessResult(await toolContext.runClaude({ prompt: args.message, appendSystemPrompt: composeAdvisorPrompt(), addDirs: [], ...toRunnerBase({ ...args, session_id: args.session_id }) }));
     }
   });
 }

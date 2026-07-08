@@ -7,7 +7,7 @@ import { createContinueSessionTool } from "../tools/continue-session.js";
 import { createReviewFilesTool } from "../tools/review-files.js";
 import { createSecondOpinionTool } from "../tools/second-opinion.js";
 import type { ConsultTool, ToolContext } from "../tools/shared-schemas.js";
-import { toErrorResult, toSuccessResult } from "./tool-result.js";
+import { toErrorResult } from "../tools/tool-result.js";
 
 export interface ServerDeps {
   readonly runClaude: RunClaude;
@@ -30,9 +30,9 @@ export function createServer(deps: ServerDeps): McpServer {
       inputSchema: tool.inputSchema
     }, async (args: Record<string, unknown>) => {
       try {
-        const envelope = await tool.execute(args);
-        deps.logger.info(`tool ${tool.name} completed (session ${envelope.sessionId})`);
-        return toSuccessResult(envelope);
+        const result = await tool.execute(args);
+        deps.logger.info(`tool ${tool.name} completed`);
+        return result;
       } catch (error) {
         deps.logger.error(`tool ${tool.name} failed: ${error instanceof Error ? error.message : String(error)}`);
         return toErrorResult(error);

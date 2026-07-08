@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ClaudeConsultError } from "../errors.js";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { commonToolShape, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { toSuccessResult } from "./tool-result.js";
 
 const DESCRIPTION = "Have Claude read and analyze specific files or directories agentically (read-only: it can Read, Glob, and Grep within the granted paths, and research the web, but never modifies anything). Provide ABSOLUTE paths that exist on this machine and a focused question, e.g. 'find the race condition in this module' or 'review these files for injection vulnerabilities'. Better than pasting file contents into ask_claude for anything larger than a snippet.";
 
@@ -79,7 +80,7 @@ export function createReviewFilesTool(toolContext: ToolContext): ConsultTool {
       const cwd = args.workspace_dir ?? commonAncestor(dirs) ?? dirs[0];
       const pathList = args.paths.map((entry) => `- ${entry}`).join("\n");
       const prompt = `Read and analyze the following paths from disk before answering. Use your Read, Glob, and Grep tools within the granted directories.\n\nPaths:\n${pathList}\n\n<question>\n${args.question}\n</question>`;
-      return toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: dirs, ...toRunnerBase(args), cwd });
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: dirs, ...toRunnerBase(args), cwd }));
     }
   });
 }

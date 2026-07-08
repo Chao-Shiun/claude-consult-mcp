@@ -17,8 +17,12 @@ function formatMetric(value: number | undefined): string {
   return value === undefined ? "n/a" : String(value);
 }
 
+export function formatFooter(envelope: ClaudeEnvelope): string {
+  return `${FOOTER_PREFIX} session_id: ${envelope.sessionId} | cost_usd: ${formatMetric(envelope.totalCostUsd)} | duration_ms: ${formatMetric(envelope.durationMs)} | turns: ${formatMetric(envelope.numTurns)}`;
+}
+
 export function toSuccessResult(envelope: ClaudeEnvelope): ToolResult {
-  const footer = `${FOOTER_PREFIX} session_id: ${envelope.sessionId} | cost_usd: ${formatMetric(envelope.totalCostUsd)} | duration_ms: ${formatMetric(envelope.durationMs)} | turns: ${formatMetric(envelope.numTurns)}`;
+  const footer = formatFooter(envelope);
   return { content: [{ type: "text", text: `${envelope.result}\n\n---\n${footer}` }] };
 }
 

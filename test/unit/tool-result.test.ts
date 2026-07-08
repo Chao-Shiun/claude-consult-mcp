@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ClaudeConsultError } from "../../src/errors.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
-import { toErrorResult, toSuccessResult } from "../../src/server/tool-result.js";
+import { formatFooter, toErrorResult, toSuccessResult } from "../../src/tools/tool-result.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -20,6 +20,10 @@ function envelope(overrides: Partial<ClaudeEnvelope> = {}): ClaudeEnvelope {
 }
 
 describe("toSuccessResult", () => {
+  it("formats the footer for aggregated tool results", () => {
+    expect(formatFooter(envelope())).toBe(`[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`);
+  });
+
   it("appends the machine-readable footer in the fixed format", () => {
     const result = toSuccessResult(envelope());
     expect(result.isError).toBeUndefined();

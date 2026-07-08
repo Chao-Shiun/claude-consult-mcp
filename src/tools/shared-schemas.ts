@@ -1,8 +1,8 @@
 import path from "node:path";
 import { z } from "zod";
 import { LIMITS, PATTERNS } from "../constants.js";
-import type { ClaudeEnvelope } from "../claude/parse-output.js";
 import type { RunClaude } from "../claude/runner.js";
+import type { ToolResult } from "./tool-result.js";
 
 export const sessionIdSchema = z.string().regex(PATTERNS.sessionId, { message: "session_id must be the UUID printed in a previous result footer" });
 
@@ -52,5 +52,5 @@ export interface ConsultTool {
   readonly title: string;
   readonly description: string;
   readonly inputSchema: z.ZodRawShape;
-  readonly execute: (args: Record<string, unknown>) => Promise<ClaudeEnvelope>;
+  readonly execute: (args: Record<string, unknown>) => Promise<ToolResult>;
 }

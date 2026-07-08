@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { commonToolShape, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { toSuccessResult } from "./tool-result.js";
 
 export const CRITICAL_REVIEWER_PROMPT = [
   "You are a critical second reviewer. Another AI coding agent produced the analysis under review.",
@@ -31,7 +32,7 @@ export function createSecondOpinionTool(toolContext: ToolContext): ConsultTool {
     execute: async (rawArgs: Record<string, unknown>) => {
       const args = argsSchema.parse(rawArgs);
       const prompt = `Another AI coding agent (OpenAI Codex) asks for an adversarial second opinion.\n\n<problem>\n${args.problem}\n</problem>\n\n<analysis-under-review>\n${args.analysis}\n</analysis-under-review>\n\nCritique the analysis as instructed in your system prompt.`;
-      return toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), addDirs: [], ...toRunnerBase(args) });
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), addDirs: [], ...toRunnerBase(args) }));
     }
   });
 }

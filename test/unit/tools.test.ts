@@ -42,13 +42,19 @@ function makeContext(): { requests: RunnerRequest[]; context: ToolContext } {
   };
 }
 
+function expectSuccessResult(result: unknown): void {
+  const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text;
+  expect(text).toContain(FIXTURE_ENVELOPE.result);
+  expect(text).toContain(`session_id: ${SESSION_ID}`);
+}
+
 describe("ask_claude tool", () => {
   it("sends the bare question with the advisor system prompt", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
     expect(tool.name).toBe("ask_claude");
-    const envelope = await tool.execute({ question: "why is the sky blue?" });
-    expect(envelope).toBe(FIXTURE_ENVELOPE);
+    const result = await tool.execute({ question: "why is the sky blue?" });
+    expectSuccessResult(result);
     expect(requests[0]?.prompt).toBe("why is the sky blue?");
     expect(requests[0]?.appendSystemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
     expect(requests[0]?.cwd).toBeUndefined();
@@ -78,7 +84,8 @@ describe("claude_second_opinion tool", () => {
     const { requests, context } = makeContext();
     const tool = createSecondOpinionTool(context);
     expect(tool.name).toBe("claude_second_opinion");
-    await tool.execute({ problem: "cache misses", analysis: "we think TTL is wrong" });
+    const result = await tool.execute({ problem: "cache misses", analysis: "we think TTL is wrong" });
+    expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toContain("<problem>\ncache misses\n</problem>");
     expect(request?.prompt).toContain("<analysis-under-review>\nwe think TTL is wrong\n</analysis-under-review>");
@@ -101,7 +108,8 @@ describe("claude_review_files tool", () => {
     const { requests, context } = makeContext();
     const tool = createReviewFilesTool(context);
     expect(tool.name).toBe("claude_review_files");
-    await tool.execute({ paths: [fileA, subDir, fileB], question: "find the bug" });
+    const result = await tool.execute({ paths: [fileA, subDir, fileB], question: "find the bug" });
+    expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toContain(fileA);
     expect(request?.prompt).toContain(subDir);
@@ -165,7 +173,8 @@ describe("claude_continue tool", () => {
     const { requests, context } = makeContext();
     const tool = createContinueSessionTool(context);
     expect(tool.name).toBe("claude_continue");
-    await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR });
+    const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR });
+    expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toBe("and double it");
     expect(request?.sessionId).toBe(SESSION_ID);
