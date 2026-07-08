@@ -62,16 +62,17 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The four tools
+## The five tools
 
 | Tool | Use it for | Required args |
 |---|---|---|
 | `ask_claude` | General co-analysis, an independent expert view | `question` (+ optional `context`) |
 | `claude_second_opinion` | Adversarial critique of Codex's own analysis before acting on it | `problem`, `analysis` |
 | `claude_review_files` | Deep read-only review of real files/directories | `paths` (absolute, 1-32), `question` |
+| `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
 
-All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session), `model`, and `session_id`.
+All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations.
 
 Every successful result ends with a machine-readable footer:
 
@@ -81,6 +82,12 @@ Every successful result ends with a machine-readable footer:
 ```
 
 Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
+
+## Verification workflows
+
+The server ships MCP instructions and trigger-worded tool descriptions so calling agents include Claude in verification workflows without per-user prompt files. Use `claude_second_opinion` for plans or conclusions, `claude_review_files` when Claude should inspect code directly, and `claude_panel` when the user wants multiple perspectives in one call.
+
+Example Codex prompt: `"Verify this plan with claude_panel using the security and correctness perspectives."`
 
 ## Model and capability policy
 
