@@ -8,7 +8,7 @@ import type { RunnerRequest } from "../../src/claude/runner.js";
 import { ADVISOR_SYSTEM_PROMPT } from "../../src/tools/advisor-prompt.js";
 import type { ToolContext } from "../../src/tools/shared-schemas.js";
 import { createAskClaudeTool } from "../../src/tools/ask-claude.js";
-import { createSecondOpinionTool } from "../../src/tools/second-opinion.js";
+import { createSecondOpinionTool, CRITICAL_REVIEWER_PROMPT } from "../../src/tools/second-opinion.js";
 import { commonAncestor } from "../../src/tools/path-analysis.js";
 import { createReviewFilesTool } from "../../src/tools/review-files.js";
 import { createContinueSessionTool } from "../../src/tools/continue-session.js";
@@ -50,6 +50,10 @@ function expectSuccessResult(result: unknown): void {
 }
 
 describe("ask_claude tool", () => {
+  it("keeps the advisor prompt anchored to precise evidence discipline", () => {
+    expect(ADVISOR_SYSTEM_PROMPT).toContain("Every claim you make must cite its evidence precisely: a file path with line numbers you actually read, or a URL you actually fetched. When the caller supplies claims about files or documents you can access, verify them yourself before relying on them, and state what you found. If you change your position, name the specific evidence that persuaded you.");
+  });
+
   it("sends the bare question with the advisor system prompt", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
@@ -81,6 +85,10 @@ describe("ask_claude tool", () => {
 });
 
 describe("claude_second_opinion tool", () => {
+  it("keeps the reviewer prompt anchored to claim verification", () => {
+    expect(CRITICAL_REVIEWER_PROMPT).toContain("For each substantive claim in the analysis under review, verify it against the actual files or sources when they are accessible, and label it verified, refuted, or cannot_verify together with your evidence.");
+  });
+
   it("wraps problem and analysis in review tags with the critical reviewer prompt", async () => {
     const { requests, context } = makeContext();
     const tool = createSecondOpinionTool(context);
@@ -181,6 +189,23 @@ describe("claude_continue tool", () => {
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
+    expect(request?.appendSystemPrompt).not.toContain("not to be agreeable");
+  });
+
+  it("keeps a critical stance on adversarial review follow-ups", async () => {
+    const { requests, context } = makeContext();
+    const tool = createContinueSessionTool(context);
+    await tool.execute({ session_id: SESSION_ID, message: "rebut this", workspace_dir: WORKSPACE_DIR, stance: "critical" });
+    expect(requests[0]?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
+    expect(requests[0]?.appendSystemPrompt).toContain("not to be agreeable");
+    expect(requests[0]?.appendSystemPrompt).toContain("verified, refuted, or cannot_verify");
+  });
+
+  it("rejects unknown continuation stances", async () => {
+    const { requests, context } = makeContext();
+    const tool = createContinueSessionTool(context);
+    await expect(tool.execute({ session_id: SESSION_ID, message: "hi", stance: "friendly" })).rejects.toBeDefined();
+    expect(requests).toHaveLength(0);
   });
 
   it("requires a session id", async () => {

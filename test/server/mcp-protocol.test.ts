@@ -76,6 +76,8 @@ describe("MCP protocol layer", () => {
     harness = await startHarness();
     expect(harness.client.getInstructions()).toContain("independent cross-model");
     expect(harness.client.getInstructions()).toContain("claude_panel");
+    expect(harness.client.getInstructions()).toContain("stance \"critical\"");
+    expect(harness.client.getInstructions()).toContain("claude_review_diff");
   });
 
   it("lists exactly the five consult tools with steering schemas", async () => {
@@ -93,6 +95,9 @@ describe("MCP protocol layer", () => {
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
     const continueTool = listed.tools.find((tool) => tool.name === "claude_continue");
     expect((continueTool?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["message", "session_id"]);
+    const continueProperties = (continueTool?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect(Object.keys(continueProperties).sort()).toEqual(["message", "model", "session_id", "stance", "workspace_dir"]);
+    expect((continueProperties.stance as { enum?: string[] }).enum).toEqual(["neutral", "critical"]);
     const panel = listed.tools.find((tool) => tool.name === "claude_panel");
     const panelProperties = (panel?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
     const perspectives = panelProperties.perspectives as { items?: { enum?: string[] } };

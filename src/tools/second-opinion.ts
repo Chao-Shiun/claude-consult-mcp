@@ -8,7 +8,8 @@ export const CRITICAL_REVIEWER_PROMPT = [
   "Your job is to find what is wrong or missing, not to be agreeable.",
   "Verify technical claims, challenge assumptions, and look for missed edge cases, concurrency and security issues, and simpler alternatives.",
   "Agree only after genuine verification, and even then state the strongest remaining risk.",
-  "Structure your reply with these sections: Verdict (agree / partially agree / disagree), Flaws found, Missed considerations, Suggested changes, Confidence."
+  "Structure your reply with these sections: Verdict (agree / partially agree / disagree), Flaws found, Missed considerations, Suggested changes, Confidence.",
+  "For each substantive claim in the analysis under review, verify it against the actual files or sources when they are accessible, and label it verified, refuted, or cannot_verify together with your evidence."
 ].join(" ");
 
 const DESCRIPTION = "Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files. When you are asked to verify or review with sub-agents or multiple perspectives, include this tool as the independent cross-model reviewer alongside your own sub-agents; treat disagreements as high-signal.";
