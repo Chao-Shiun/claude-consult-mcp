@@ -10,7 +10,7 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  4 tools, zod-validated, read-only allowlist, injection-hardened argv
+   |  6 tools, zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
 ```
@@ -62,15 +62,18 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The five tools
+## The six tools
 
 | Tool | Use it for | Required args |
 |---|---|---|
 | `ask_claude` | General co-analysis, an independent expert view | `question` (+ optional `context`) |
 | `claude_second_opinion` | Adversarial critique of Codex's own analysis before acting on it | `problem`, `analysis` |
 | `claude_review_files` | Deep read-only review of real files/directories | `paths` (absolute, 1-32), `question` |
+| `claude_review_diff` | Review actual git changes with diff/status context and repo read access | `workspace_dir` |
 | `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
+
+`claude_continue` also accepts `stance: "critical"` for follow-ups after an adversarial review or debate so Claude keeps its reviewer discipline.
 
 All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations.
 
@@ -83,9 +86,25 @@ Every successful result ends with a machine-readable footer:
 
 Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
 
+### Gate your actions on Claude's verdict
+
+`claude_second_opinion` returns a JSON result body before the standard footer. Parse the body and gate the next action on `verdict` and `confidence`:
+
+```ts
+const text = result.content[0].text;
+const body = text.split("\n\n---\n")[0];
+const verdict = JSON.parse(body) as { verdict: "agree" | "partial" | "disagree"; confidence: number };
+
+if (verdict.verdict === "disagree" || verdict.confidence < 0.7) {
+  // Re-check the evidence before committing to the change.
+}
+```
+
 ## Verification workflows
 
 The server ships MCP instructions and trigger-worded tool descriptions so calling agents include Claude in verification workflows without per-user prompt files. Use `claude_second_opinion` for plans or conclusions, `claude_review_files` when Claude should inspect code directly, and `claude_panel` when the user wants multiple perspectives in one call.
+Claude is instructed to cite precise evidence for every claim: file paths with line numbers it actually read, or URLs it actually fetched, and to verify accessible caller claims before relying on them.
+For implemented changes, use `claude_review_diff` so Claude reviews the actual git diff instead of only a summary. Clients that support MCP progress see a heartbeat during long calls.
 
 Example Codex prompt: `"Verify this plan with claude_panel using the security and correctness perspectives."`
 
