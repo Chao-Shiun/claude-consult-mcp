@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, PATTERNS } from "../constants.js";
+import { EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, PATTERNS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 
@@ -10,12 +10,14 @@ export interface RunPolicyRequest {
 
 export interface RunPolicy {
   readonly model: string | undefined;
+  readonly effort: string | undefined;
   readonly budgetUsd: number | undefined;
 }
 
 export interface RunSpec {
   readonly allowedTools: readonly string[];
   readonly model: string | undefined;
+  readonly effort: string | undefined;
   readonly sessionId: string | undefined;
   readonly appendSystemPrompt: string | undefined;
   readonly budgetUsd: number | undefined;
@@ -46,7 +48,7 @@ export function resolveRunPolicy(config: Config, request: RunPolicyRequest): Run
       invalid(`requested budget ${request.budgetUsd} exceeds the ${ENV.maxBudgetUsd} cap of ${config.maxBudgetUsd}`, `pass budget_usd at most ${config.maxBudgetUsd} or omit it to use the cap`);
     }
   }
-  return Object.freeze({ model, budgetUsd: request.budgetUsd ?? config.maxBudgetUsd });
+  return Object.freeze({ model, effort: isFableModel(model) ? "max" : undefined, budgetUsd: request.budgetUsd ?? config.maxBudgetUsd });
 }
 
 function validateTools(allowedTools: readonly string[]): void {
@@ -71,6 +73,12 @@ export function buildClaudeArgs(spec: RunSpec): readonly string[] {
       invalid(`model "${spec.model}" does not match the safe model pattern`, "use an alias like opus/sonnet/haiku or a full model id");
     }
     args.push("--model", spec.model);
+  }
+  if (spec.effort !== undefined) {
+    if (!(EFFORT_LEVELS as readonly string[]).includes(spec.effort)) {
+      invalid(`effort "${spec.effort}" is not one of ${EFFORT_LEVELS.join(", ")}`, "use low, medium, high, xhigh, or max");
+    }
+    args.push("--effort", spec.effort);
   }
   if (spec.sessionId !== undefined) {
     if (!PATTERNS.sessionId.test(spec.sessionId)) {

@@ -9,6 +9,7 @@ function baseSpec(overrides: Partial<RunSpec> = {}): RunSpec {
   return {
     allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
     model: undefined,
+    effort: undefined,
     sessionId: undefined,
     appendSystemPrompt: undefined,
     budgetUsd: undefined,
@@ -40,6 +41,7 @@ describe("buildClaudeArgs", () => {
   it("appends every conditional flag in deterministic order", () => {
     const args = buildClaudeArgs(baseSpec({
       model: "sonnet",
+      effort: "max",
       sessionId: SESSION_ID,
       appendSystemPrompt: "advisor role text",
       budgetUsd: 1.5,
@@ -49,12 +51,17 @@ describe("buildClaudeArgs", () => {
       "-p", "--output-format", "json", "--permission-mode", "default",
       "--allowedTools", "Read,Glob,Grep,WebSearch,WebFetch", "--strict-mcp-config",
       "--model", "sonnet",
+      "--effort", "max",
       "-r", SESSION_ID,
       "--append-system-prompt", "advisor role text",
       "--max-budget-usd", "1.5",
       "--add-dir", "C:\\proj",
       "--add-dir", "D:\\lib"
     ]);
+  });
+
+  it("rejects unknown effort levels", () => {
+    expectInvalidInput(() => buildClaudeArgs(baseSpec({ effort: "turbo" })), "effort");
   });
 
   it("rejects flag-shaped models and malformed session ids", () => {
@@ -125,6 +132,14 @@ describe("resolveRunPolicy", () => {
     const config = loadConfig({});
     expect(resolveRunPolicy(config, { budgetUsd: 5 }).budgetUsd).toBe(5);
     expectInvalidInput(() => resolveRunPolicy(config, { budgetUsd: 0 }), "budget");
+  });
+
+  it("forces max effort for Fable models and leaves others unset", () => {
+    const config = loadConfig({});
+    expect(resolveRunPolicy(config, { model: "claude-fable-5" }).effort).toBe("max");
+    expect(resolveRunPolicy(config, {}).effort).toBeUndefined();
+    const fableDefault = loadConfig({ CLAUDE_CONSULT_MODEL: "claude-fable-5" });
+    expect(resolveRunPolicy(fableDefault, {}).effort).toBe("max");
   });
 });
 

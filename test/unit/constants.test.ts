@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, VERSION } from "../../src/constants.js";
+import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, VERSION } from "../../src/constants.js";
 
 describe("constants", () => {
   it("exposes package identity values", () => {
@@ -65,6 +65,11 @@ describe("constants", () => {
 
   it("defines log levels from silent to debug", () => {
     expect(LOG_LEVELS).toEqual(["silent", "error", "info", "debug"]);
+  });
+
+  it("defines effort levels with max as the ceiling", () => {
+    expect(EFFORT_LEVELS).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(Object.isFrozen(EFFORT_LEVELS)).toBe(true);
   });
 
   it("validates session ids as UUIDs", () => {

@@ -38,6 +38,9 @@ export type Capability = (typeof CAPABILITIES)[number];
 export const LOG_LEVELS = deepFreeze(["silent", "error", "info", "debug"] as const);
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+export const EFFORT_LEVELS = deepFreeze(["low", "medium", "high", "xhigh", "max"] as const);
+export type Effort = (typeof EFFORT_LEVELS)[number];
+
 export const DEFAULTS = deepFreeze({
   timeoutMs: 600_000,
   model: "opus",
