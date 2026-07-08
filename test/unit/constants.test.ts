@@ -3,7 +3,7 @@ import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SE
 
 describe("constants", () => {
   it("exposes package identity values", () => {
-    expect(VERSION).toBe("0.3.0");
+    expect(VERSION).toBe("0.4.0");
     expect(SERVER_NAME).toBe("claude-consult-mcp");
     expect(CODEX_SERVER_ID).toBe("claude-consult");
     expect(FOOTER_PREFIX).toBe("[claude-consult]");
