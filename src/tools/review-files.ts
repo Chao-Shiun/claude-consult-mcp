@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { commonToolShape, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, depthSchema, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
 import { analyzePaths } from "./path-analysis.js";
 import { toSuccessResult } from "./tool-result.js";
 
@@ -9,6 +9,7 @@ const DESCRIPTION = "Have Claude read and analyze specific files or directories 
 const argsSchema = z.object({
   paths: pathsSchema,
   question: promptTextSchema,
+  depth: depthSchema,
   ...commonToolShape
 });
 
@@ -20,13 +21,14 @@ export function createReviewFilesTool(toolContext: ToolContext): ConsultTool {
     inputSchema: {
       paths: pathsSchema.describe("Absolute paths of files or directories to analyze (1-32). Every path must exist on this machine."),
       question: promptTextSchema.describe("What to look for or evaluate in these paths."),
+      depth: depthSchema,
       ...commonToolShape
     },
     execute: async (rawArgs: Record<string, unknown>) => {
       const args = argsSchema.parse(rawArgs);
       const analysis = await analyzePaths(args.paths, args.workspace_dir);
       const prompt = `Read and analyze the following paths from disk before answering. Use your Read, Glob, and Grep tools within the granted directories.\n\nPaths:\n${analysis.pathList}\n\n<question>\n${args.question}\n</question>`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd }));
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd, depth: args.depth }));
     }
   });
 }

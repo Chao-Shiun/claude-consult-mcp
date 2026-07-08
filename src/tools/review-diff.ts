@@ -3,7 +3,7 @@ import { LIMITS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import { runCommand } from "../run-command.js";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { absolutePathSchema, commonToolShape, promptTextSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { absolutePathSchema, commonToolShape, depthSchema, promptTextSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
 import { toSuccessResult, type ToolResult } from "./tool-result.js";
 
 const DESCRIPTION = "Have Claude review your actual code changes: the server runs read-only git in the given repository and gives Claude the diff plus read access to the surrounding files. Pass the repository root as workspace_dir. By default it reviews uncommitted changes against HEAD; pass base (a branch, tag, or commit) to review everything since that ref (base...HEAD). Use it after implementing something to get an independent cross-model review of the change itself. Claude only advises; it never modifies anything. For reviewing files without git context, use claude_review_files.";
@@ -14,6 +14,7 @@ const argsSchema = z.object({
   workspace_dir: absolutePathSchema,
   base: baseRefSchema.optional(),
   question: promptTextSchema.optional(),
+  depth: depthSchema,
   model: commonToolShape.model,
   session_id: commonToolShape.session_id
 });
@@ -58,6 +59,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       workspace_dir: absolutePathSchema.describe("Repository root to inspect with read-only git commands."),
       base: baseRefSchema.optional().describe("Branch, tag, or commit to compare as base...HEAD. Omit to review uncommitted changes against HEAD."),
       question: promptTextSchema.optional().describe("Optional focus for the diff review."),
+      depth: depthSchema,
       model: commonToolShape.model,
       session_id: commonToolShape.session_id
     },
@@ -87,7 +89,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
-        sessionId: args.session_id
+        sessionId: args.session_id,
+        depth: args.depth
       }));
     }
   });

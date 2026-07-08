@@ -67,6 +67,12 @@ describe("loadConfig", () => {
     expect(config.allowedTools).toEqual(["Read", "Grep"]);
   });
 
+  it("accepts the deep-research capability tier", () => {
+    const config = loadConfig({ CLAUDE_CONSULT_CAPABILITY: "deep-research" });
+    expect(config.capability).toBe("deep-research");
+    expect(config.allowedTools).toEqual(CAPABILITY_TOOLS["deep-research"]);
+  });
+
   it("rejects malformed and out-of-range timeouts", () => {
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_TIMEOUT_MS: "abc" }), "CLAUDE_CONSULT_TIMEOUT_MS");
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_TIMEOUT_MS: "4999" }), "CLAUDE_CONSULT_TIMEOUT_MS");

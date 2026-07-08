@@ -138,8 +138,9 @@ describe("claude_review_files tool", () => {
     writeFileSync(fileA, "export const a = 1;\n");
     const { requests, context } = makeContext();
     const tool = createReviewFilesTool(context);
-    await tool.execute({ paths: [fileA], question: "q", workspace_dir: base });
+    await tool.execute({ paths: [fileA], question: "q", workspace_dir: base, depth: "deep" });
     expect(requests[0]?.cwd).toBe(base);
+    expect(requests[0]?.depth).toBe("deep");
   });
 
   it("lists every missing path in one INVALID_INPUT error", async () => {

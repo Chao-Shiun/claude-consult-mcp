@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config.js";
+import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
 import { createLogger } from "../../src/logger.js";
 import { createRunner, type RunnerDeps } from "../../src/claude/runner.js";
@@ -91,6 +92,35 @@ describe("createRunner", () => {
     await runner.run({ prompt: "structured", jsonSchema: VERDICT_JSON_SCHEMA });
     const args = harness.spawnRequests[0]?.args ?? [];
     expect(args[args.indexOf("--json-schema") + 1]).toBe(VERDICT_JSON_SCHEMA);
+  });
+
+  it("rejects deep analysis unless the machine enables deep-research", async () => {
+    const harness = makeHarness();
+    const runner = createRunner(harness.deps);
+    await expectCode(runner.run({ prompt: "investigate broadly", depth: "deep" }), "INVALID_INPUT");
+    expect(harness.spawnRequests).toHaveLength(0);
+  });
+
+  it("passes the deep-research tool list and guidance when depth is deep", async () => {
+    const harness = makeHarness({ CLAUDE_CONSULT_CAPABILITY: "deep-research" });
+    const runner = createRunner(harness.deps);
+    await runner.run({ prompt: "investigate broadly", depth: "deep" });
+    const request = harness.spawnRequests[0];
+    const args = request?.args ?? [];
+    expect(args[args.indexOf("--allowedTools") + 1]).toBe(CAPABILITY_TOOLS["deep-research"].join(","));
+    expect(args[args.indexOf("--allowedTools") + 1]).toContain(SUBAGENT_TOOL_TOKEN);
+    expect(request?.prompt).toContain("You may delegate read-only exploration to sub-agents to cover large scopes, then synthesize their findings yourself.");
+  });
+
+  it("keeps standard runs on the research tool list even when the machine enables deep-research", async () => {
+    const harness = makeHarness({ CLAUDE_CONSULT_CAPABILITY: "deep-research" });
+    const runner = createRunner(harness.deps);
+    await runner.run({ prompt: "standard review", depth: "standard" });
+    const request = harness.spawnRequests[0];
+    const args = request?.args ?? [];
+    expect(args[args.indexOf("--allowedTools") + 1]).toBe(CAPABILITY_TOOLS.research.join(","));
+    expect(args[args.indexOf("--allowedTools") + 1]).not.toContain(SUBAGENT_TOOL_TOKEN);
+    expect(request?.prompt).not.toContain("You may delegate read-only exploration");
   });
 
   it("injects MAX_THINKING_TOKENS only when the cap is configured", async () => {

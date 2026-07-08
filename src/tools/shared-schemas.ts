@@ -18,6 +18,9 @@ export const absolutePathSchema = z.string().min(1)
 
 export const pathsSchema = z.array(absolutePathSchema).min(1).max(LIMITS.pathsMax);
 
+export const depthSchema = z.enum(["standard", "deep"]).optional()
+  .describe("deep lets Claude delegate read-only exploration to sub-agents for large scopes - slower and several times the usage; requires the machine to enable CLAUDE_CONSULT_CAPABILITY=deep-research.");
+
 export const commonToolShape = {
   workspace_dir: absolutePathSchema.optional().describe("Absolute path to the project this relates to; becomes Claude's working directory. Reuse the same value when continuing a session."),
   model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
@@ -29,6 +32,8 @@ export interface CommonToolArgs {
   readonly model?: string | undefined;
   readonly session_id?: string | undefined;
 }
+
+export type AnalysisDepth = z.infer<typeof depthSchema>;
 
 export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; sessionId: string | undefined; cwd: string | undefined } {
   return {

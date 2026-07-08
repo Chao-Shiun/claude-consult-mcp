@@ -18,6 +18,7 @@ export const CODEX_SERVER_ID = "claude-consult";
 export const FOOTER_PREFIX = "[claude-consult]";
 export const CHILD_ENV_MAX_THINKING_TOKENS = "MAX_THINKING_TOKENS";
 export const FABLE_MODEL_MARKER = "fable";
+export const SUBAGENT_TOOL_TOKEN = "Task";
 
 export const ENV = deepFreeze({
   claudeBin: "CLAUDE_CONSULT_CLAUDE_BIN",
@@ -33,7 +34,7 @@ export const ENV = deepFreeze({
   e2e: "CLAUDE_CONSULT_E2E"
 });
 
-export const CAPABILITIES = deepFreeze(["readonly", "research"] as const);
+export const CAPABILITIES = deepFreeze(["readonly", "research", "deep-research"] as const);
 export type Capability = (typeof CAPABILITIES)[number];
 
 export const LOG_LEVELS = deepFreeze(["silent", "error", "info", "debug"] as const);
@@ -68,7 +69,8 @@ export const LIMITS = deepFreeze({
 
 export const CAPABILITY_TOOLS: Readonly<Record<Capability, readonly string[]>> = deepFreeze({
   readonly: ["Read", "Glob", "Grep"],
-  research: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
+  research: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
+  "deep-research": ["Read", "Glob", "Grep", "WebSearch", "WebFetch", SUBAGENT_TOOL_TOKEN]
 });
 
 export const FORBIDDEN_TOOLS = deepFreeze(["Write", "Edit", "NotebookEdit", "Bash"] as const);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, VERSION } from "../../src/constants.js";
+import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, SUBAGENT_TOOL_TOKEN, VERSION } from "../../src/constants.js";
 
 describe("constants", () => {
   it("exposes package identity values", () => {
@@ -48,10 +48,12 @@ describe("constants", () => {
     expect(LIMITS.pathsMax).toBe(32);
   });
 
-  it("defines exactly two capability tiers without any write-capable tool", () => {
-    expect(CAPABILITIES).toEqual(["readonly", "research"]);
+  it("defines exactly three capability tiers without any write-capable tool", () => {
+    expect(CAPABILITIES).toEqual(["readonly", "research", "deep-research"]);
+    expect(SUBAGENT_TOOL_TOKEN).toBe("Task");
     expect(CAPABILITY_TOOLS.readonly).toEqual(["Read", "Glob", "Grep"]);
     expect(CAPABILITY_TOOLS.research).toEqual(["Read", "Glob", "Grep", "WebSearch", "WebFetch"]);
+    expect(CAPABILITY_TOOLS["deep-research"]).toEqual(["Read", "Glob", "Grep", "WebSearch", "WebFetch", SUBAGENT_TOOL_TOKEN]);
     for (const tier of CAPABILITIES) {
       for (const forbidden of FORBIDDEN_TOOLS) {
         expect(CAPABILITY_TOOLS[tier]).not.toContain(forbidden);
@@ -107,7 +109,7 @@ describe("constants", () => {
   });
 
   it("freezes every exported structure", () => {
-    for (const value of [ENV, DEFAULTS, LIMITS, CAPABILITIES, CAPABILITY_TOOLS, CAPABILITY_TOOLS.readonly, CAPABILITY_TOOLS.research, FORBIDDEN_TOOLS, LOG_LEVELS, PATTERNS]) {
+    for (const value of [ENV, DEFAULTS, LIMITS, CAPABILITIES, CAPABILITY_TOOLS, CAPABILITY_TOOLS.readonly, CAPABILITY_TOOLS.research, CAPABILITY_TOOLS["deep-research"], FORBIDDEN_TOOLS, LOG_LEVELS, PATTERNS]) {
       expect(Object.isFrozen(value)).toBe(true);
     }
   });

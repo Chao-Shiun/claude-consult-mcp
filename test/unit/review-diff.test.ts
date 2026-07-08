@@ -162,9 +162,10 @@ describe("claude_review_diff tool", () => {
     const { requests, context } = makeContext();
     const tool = createReviewDiffTool(context);
 
-    await tool.execute({ workspace_dir: repo, question: "Focus on API compatibility." });
+    await tool.execute({ workspace_dir: repo, question: "Focus on API compatibility.", depth: "deep" });
 
     expect(requests[0]?.prompt).toContain("<question>\nFocus on API compatibility.\n</question>");
+    expect(requests[0]?.depth).toBe("deep");
   });
 
   it("does not execute configured external diff commands", async () => {

@@ -1,5 +1,5 @@
 import os from "node:os";
-import { CHILD_ENV_MAX_THINKING_TOKENS, LIMITS } from "../constants.js";
+import { CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, LIMITS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 import type { Logger } from "../logger.js";
@@ -17,6 +17,7 @@ export interface RunnerRequest {
   readonly jsonSchema?: string | undefined;
   readonly addDirs?: readonly string[] | undefined;
   readonly cwd?: string | undefined;
+  readonly depth?: "standard" | "deep" | undefined;
 }
 
 export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
@@ -45,6 +46,25 @@ function validatePrompt(prompt: string): void {
   }
 }
 
+const DEEP_RESEARCH_GUIDANCE = "You may delegate read-only exploration to sub-agents to cover large scopes, then synthesize their findings yourself.";
+
+function resolveAllowedTools(config: Config, depth: RunnerRequest["depth"]): readonly string[] {
+  if (depth === "deep" && config.capability !== "deep-research") {
+    throw new ClaudeConsultError("INVALID_INPUT", "deep analysis requires CLAUDE_CONSULT_CAPABILITY=deep-research on this machine", "unset depth or ask the repository owner to enable the deep-research capability tier");
+  }
+  if (depth === "deep") {
+    return CAPABILITY_TOOLS["deep-research"];
+  }
+  if (config.capability === "deep-research" && config.allowedTools === CAPABILITY_TOOLS["deep-research"]) {
+    return CAPABILITY_TOOLS.research;
+  }
+  return config.allowedTools;
+}
+
+function applyDepthGuidance(prompt: string, depth: RunnerRequest["depth"]): string {
+  return depth === "deep" ? `${prompt}\n\n${DEEP_RESEARCH_GUIDANCE}` : prompt;
+}
+
 export function createRunner(deps: RunnerDeps): Runner {
   const semaphore = createSemaphore(deps.config.maxConcurrency);
   const inFlight = new Set<() => void>();
@@ -57,10 +77,12 @@ export function createRunner(deps: RunnerDeps): Runner {
   };
 
   const run = async (request: RunnerRequest): Promise<ClaudeEnvelope> => {
-    validatePrompt(request.prompt);
+    const prompt = applyDepthGuidance(request.prompt, request.depth);
+    validatePrompt(prompt);
+    const allowedTools = resolveAllowedTools(deps.config, request.depth);
     const policy = resolveRunPolicy(deps.config, { model: request.model });
     const args = buildClaudeArgs({
-      allowedTools: deps.config.allowedTools,
+      allowedTools,
       model: policy.model,
       effort: policy.effort,
       sessionId: request.sessionId,
@@ -78,7 +100,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const raw = await semaphore.withPermit(() => deps.spawnImpl({
       binPath,
       args,
-      prompt: request.prompt,
+      prompt,
       cwd,
       env,
       timeoutMs: deps.config.timeoutMs

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config.js";
+import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError } from "../../src/errors.js";
 import { buildClaudeArgs, isFableModel, resolveRunPolicy, type RunSpec } from "../../src/claude/build-args.js";
 import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
@@ -112,6 +113,12 @@ describe("buildClaudeArgs", () => {
     for (const forbidden of ["--max-turns", "bypassPermissions", "acceptEdits", "--dangerously-skip-permissions", "Write", "Edit", "Bash"]) {
       expect(rendered).not.toContain(forbidden);
     }
+  });
+
+  it("accepts the verified sub-agent token only through the deep-research tier list", () => {
+    const args = buildClaudeArgs(baseSpec({ allowedTools: CAPABILITY_TOOLS["deep-research"] }));
+    expect(args[args.indexOf("--allowedTools") + 1]).toBe(`Read,Glob,Grep,WebSearch,WebFetch,${SUBAGENT_TOOL_TOKEN}`);
+    expectInvalidInput(() => buildClaudeArgs(baseSpec({ allowedTools: [...CAPABILITY_TOOLS["deep-research"], "Write"] })), "Write");
   });
 });
 
