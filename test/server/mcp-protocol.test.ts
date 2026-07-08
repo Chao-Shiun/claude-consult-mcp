@@ -28,16 +28,33 @@ interface TestHarness {
   close: () => Promise<void>;
 }
 
-async function startHarness(runClaudeError?: unknown): Promise<TestHarness> {
+interface HarnessOptions {
+  readonly runClaudeError?: unknown;
+  readonly runClaude?: (request: RunnerRequest) => Promise<ClaudeEnvelope>;
+  readonly progressHeartbeatMs?: number;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isHarnessOptions(value: unknown): value is HarnessOptions {
+  return value !== null && typeof value === "object" && ("runClaude" in value || "runClaudeError" in value || "progressHeartbeatMs" in value);
+}
+
+async function startHarness(optionsOrError?: HarnessOptions | unknown): Promise<TestHarness> {
+  const options: HarnessOptions = isHarnessOptions(optionsOrError)
+    ? optionsOrError
+    : { runClaudeError: optionsOrError };
   const requests: RunnerRequest[] = [];
   const runClaude = async (request: RunnerRequest): Promise<ClaudeEnvelope> => {
     requests.push(request);
-    if (runClaudeError !== undefined) {
-      throw runClaudeError;
+    if (options.runClaudeError !== undefined) {
+      throw options.runClaudeError;
     }
-    return FIXTURE_ENVELOPE;
+    return options.runClaude === undefined ? FIXTURE_ENVELOPE : options.runClaude(request);
   };
-  const server = createServer({ runClaude, logger: silentLogger });
+  const server = createServer({ runClaude, logger: silentLogger, progressHeartbeatMs: options.progressHeartbeatMs });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "protocol-test", version: "0.0.1" });
   let stdoutWrites = 0;
@@ -149,5 +166,38 @@ describe("MCP protocol layer", () => {
     harness = await startHarness();
     await harness.client.callTool({ name: "ask_claude", arguments: { question: "q" } });
     expect(harness.stdoutWrites).toBe(0);
+  });
+
+  it("sends progress heartbeats during long tool calls when the client asks for progress", async () => {
+    const progressEvents: Array<{ progress: number; message?: string }> = [];
+    harness = await startHarness({ progressHeartbeatMs: 50, runClaude: async () => {
+      await sleep(130);
+      return FIXTURE_ENVELOPE;
+    } });
+    const result = await harness.client.callTool({ name: "ask_claude", arguments: { question: "slow?" } }, undefined, {
+      onprogress: (progress) => {
+        progressEvents.push(progress);
+      }
+    });
+    expect(result.isError ?? false).toBe(false);
+    expect(progressEvents.length).toBeGreaterThanOrEqual(1);
+    expect(progressEvents[0]?.message).toContain("ask_claude running");
+    expect(progressEvents[0]?.message).toContain("elapsed");
+    expect(progressEvents[0]?.progress).toBeGreaterThan(0);
+    const settledCount = progressEvents.length;
+    await sleep(120);
+    expect(progressEvents).toHaveLength(settledCount);
+  });
+
+  it("does not start a progress timer when the client does not ask for progress", async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    harness = await startHarness({ progressHeartbeatMs: 50, runClaude: async () => {
+      await sleep(80);
+      return FIXTURE_ENVELOPE;
+    } });
+    const result = await harness.client.callTool({ name: "ask_claude", arguments: { question: "slow?" } });
+    expect(result.isError ?? false).toBe(false);
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+    setIntervalSpy.mockRestore();
   });
 });

@@ -13,6 +13,7 @@ import { toErrorResult } from "../tools/tool-result.js";
 export interface ServerDeps {
   readonly runClaude: RunClaude;
   readonly logger: Logger;
+  readonly progressHeartbeatMs?: number;
 }
 
 export const SERVER_INSTRUCTIONS = [
@@ -26,6 +27,7 @@ export const SERVER_INSTRUCTIONS = [
 
 export function createServer(deps: ServerDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
+  const progressHeartbeatMs = Math.max(50, deps.progressHeartbeatMs ?? 10_000);
   const context: ToolContext = { runClaude: deps.runClaude };
   const tools: readonly ConsultTool[] = [
     createAskClaudeTool(context),
@@ -39,7 +41,22 @@ export function createServer(deps: ServerDeps): McpServer {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema
-    }, async (args: Record<string, unknown>) => {
+    }, async (args: Record<string, unknown>, extra) => {
+      const progressToken = extra._meta?.progressToken;
+      const started = Date.now();
+      const heartbeat = progressToken === undefined ? undefined : setInterval(() => {
+        const elapsed = Math.max(1, Math.floor((Date.now() - started) / 1000));
+        void extra.sendNotification({
+          method: "notifications/progress",
+          params: {
+            progressToken,
+            progress: elapsed,
+            message: `${tool.name} running (${elapsed}s elapsed)`
+          }
+        }).catch((error: unknown) => {
+          deps.logger.debug(`tool ${tool.name} progress notification failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }, progressHeartbeatMs);
       try {
         const result = await tool.execute(args);
         deps.logger.info(`tool ${tool.name} completed`);
@@ -47,6 +64,10 @@ export function createServer(deps: ServerDeps): McpServer {
       } catch (error) {
         deps.logger.error(`tool ${tool.name} failed: ${error instanceof Error ? error.message : String(error)}`);
         return toErrorResult(error);
+      } finally {
+        if (heartbeat !== undefined) {
+          clearInterval(heartbeat);
+        }
       }
     });
   }
