@@ -4,6 +4,7 @@ import type { Logger } from "../logger.js";
 import type { RunClaude } from "../claude/runner.js";
 import { createAskClaudeTool } from "../tools/ask-claude.js";
 import { createContinueSessionTool } from "../tools/continue-session.js";
+import { createPanelTool } from "../tools/panel.js";
 import { createReviewFilesTool } from "../tools/review-files.js";
 import { createSecondOpinionTool } from "../tools/second-opinion.js";
 import type { ConsultTool, ToolContext } from "../tools/shared-schemas.js";
@@ -28,6 +29,7 @@ export function createServer(deps: ServerDeps): McpServer {
   const tools: readonly ConsultTool[] = [
     createAskClaudeTool(context),
     createSecondOpinionTool(context),
+    createPanelTool(context),
     createReviewFilesTool(context),
     createContinueSessionTool(context)
   ];

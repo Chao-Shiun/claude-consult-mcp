@@ -78,11 +78,11 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_panel");
   });
 
-  it("lists exactly the four consult tools with steering schemas", async () => {
+  it("lists exactly the five consult tools with steering schemas", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_continue", "claude_review_files", "claude_second_opinion"]);
+    expect(names).toEqual(["ask_claude", "claude_continue", "claude_panel", "claude_review_files", "claude_second_opinion"]);
     const ask = listed.tools.find((tool) => tool.name === "ask_claude");
     expect(ask?.description).toContain("advisory only");
     expect(ask?.description).toContain("claude_panel");
@@ -93,6 +93,11 @@ describe("MCP protocol layer", () => {
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
     const continueTool = listed.tools.find((tool) => tool.name === "claude_continue");
     expect((continueTool?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["message", "session_id"]);
+    const panel = listed.tools.find((tool) => tool.name === "claude_panel");
+    const panelProperties = (panel?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    const perspectives = panelProperties.perspectives as { items?: { enum?: string[] } };
+    expect(perspectives.items?.enum).toEqual(["correctness", "security", "performance", "simplicity", "architecture", "testing"]);
+    expect((panel?.inputSchema as { required?: string[] }).required).toEqual(["task"]);
   });
 
   it("returns the answer with the footer on a successful call", async () => {
@@ -103,6 +108,17 @@ describe("MCP protocol layer", () => {
     expect(content[0]?.text).toContain("the answer");
     expect(content[0]?.text).toContain(`session_id: ${SESSION_ID}`);
     expect(harness.requests).toHaveLength(1);
+  });
+
+  it("returns a default three-perspective panel report", async () => {
+    harness = await startHarness();
+    const result = await harness.client.callTool({ name: "claude_panel", arguments: { task: "review this" } });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(result.isError ?? false).toBe(false);
+    expect(content[0]?.text).toContain("## Perspective: correctness");
+    expect(content[0]?.text).toContain("## Perspective: security");
+    expect(content[0]?.text).toContain("## Perspective: simplicity");
+    expect(harness.requests).toHaveLength(3);
   });
 
   it("returns schema violations as error results without invoking the runner", async () => {
