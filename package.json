@@ -4,6 +4,15 @@
   "description": "MCP stdio server that lets OpenAI Codex consult local Claude Code for co-analysis, second opinions, and read-only file review",
   "type": "module",
   "license": "MIT",
+  "author": "Chao-Shiun",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chao-Shiun/claude-consult-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Chao-Shiun/claude-consult-mcp/issues"
+  },
+  "homepage": "https://github.com/Chao-Shiun/claude-consult-mcp#readme",
   "engines": {
     "node": ">=20"
   },
