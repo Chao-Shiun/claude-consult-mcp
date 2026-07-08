@@ -97,16 +97,19 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
   });
 
-  it("lists exactly the five consult tools with steering schemas", async () => {
+  it("lists exactly the six consult tools with steering schemas", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_continue", "claude_panel", "claude_review_files", "claude_second_opinion"]);
+    expect(names).toEqual(["ask_claude", "claude_continue", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
     const ask = listed.tools.find((tool) => tool.name === "ask_claude");
     expect(ask?.description).toContain("advisory only");
     expect(ask?.description).toContain("claude_panel");
     const secondOpinion = listed.tools.find((tool) => tool.name === "claude_second_opinion");
     expect(secondOpinion?.description).toContain("sub-agents");
+    const reviewDiff = listed.tools.find((tool) => tool.name === "claude_review_diff");
+    expect(reviewDiff?.description).toContain("actual code changes");
+    expect((reviewDiff?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
     expect(Object.keys(properties).sort()).toEqual(["context", "model", "question", "session_id", "workspace_dir"]);
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
