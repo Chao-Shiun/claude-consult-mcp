@@ -1,5 +1,6 @@
 function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object") {
+  // RegExp instances must stay unfrozen: zod's .regex() writes lastIndex during checks.
+  if (value !== null && typeof value === "object" && !(value instanceof RegExp)) {
     for (const key of Object.getOwnPropertyNames(value)) {
       const child = (value as Record<string, unknown>)[key];
       if (child !== null && typeof child === "object" && !Object.isFrozen(child)) {

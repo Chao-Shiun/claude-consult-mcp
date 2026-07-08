@@ -103,4 +103,10 @@ describe("constants", () => {
       expect(Object.isFrozen(value)).toBe(true);
     }
   });
+
+  it("leaves RegExp instances unfrozen so zod regex checks can write lastIndex", () => {
+    expect(Object.isFrozen(PATTERNS.sessionId)).toBe(false);
+    expect(Object.isFrozen(PATTERNS.model)).toBe(false);
+    expect(Object.isFrozen(PATTERNS.toolToken)).toBe(false);
+  });
 });
