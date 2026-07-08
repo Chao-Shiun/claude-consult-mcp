@@ -14,6 +14,10 @@ import { createContinueSessionTool } from "../../src/tools/continue-session.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
+// workspace_dir must be absolute on the host platform; CI runs this suite on
+// Windows, macOS, and Linux.
+const WORKSPACE_DIR = process.platform === "win32" ? "C:\\proj" : "/proj";
+
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "the answer",
   sessionId: SESSION_ID,
@@ -53,10 +57,10 @@ describe("ask_claude tool", () => {
   it("wraps context in background tags and forwards common args", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
-    await tool.execute({ question: "q", context: "tried X", workspace_dir: "C:\\proj", model: "haiku", budget_usd: 0.5, session_id: SESSION_ID });
+    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", budget_usd: 0.5, session_id: SESSION_ID });
     const request = requests[0];
     expect(request?.prompt).toBe("<background-context>\ntried X\n</background-context>\n\nq");
-    expect(request?.cwd).toBe("C:\\proj");
+    expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.model).toBe("haiku");
     expect(request?.budgetUsd).toBe(0.5);
     expect(request?.sessionId).toBe(SESSION_ID);
@@ -120,8 +124,9 @@ describe("claude_review_files tool", () => {
   it("lists every missing path in one INVALID_INPUT error", async () => {
     const { requests, context } = makeContext();
     const tool = createReviewFilesTool(context);
-    const missingA = "C:\\definitely\\missing\\a.ts";
-    const missingB = "C:\\definitely\\missing\\b.ts";
+    const missingBase = path.join(os.tmpdir(), `ccm-definitely-missing-${process.pid}`);
+    const missingA = path.join(missingBase, "a.ts");
+    const missingB = path.join(missingBase, "b.ts");
     try {
       await tool.execute({ paths: [missingA, missingB], question: "q" });
       expect.unreachable("expected INVALID_INPUT");
@@ -160,11 +165,11 @@ describe("claude_continue tool", () => {
     const { requests, context } = makeContext();
     const tool = createContinueSessionTool(context);
     expect(tool.name).toBe("claude_continue");
-    await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: "C:\\proj" });
+    await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR });
     const request = requests[0];
     expect(request?.prompt).toBe("and double it");
     expect(request?.sessionId).toBe(SESSION_ID);
-    expect(request?.cwd).toBe("C:\\proj");
+    expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
   });
 

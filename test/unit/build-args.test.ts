@@ -5,6 +5,13 @@ import { buildClaudeArgs, isFableModel, resolveRunPolicy, type RunSpec } from ".
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
+// Absolute-path fixtures must match the host platform because path.isAbsolute
+// is host-dependent; CI runs this suite on Windows, macOS, and Linux.
+const IS_WINDOWS = process.platform === "win32";
+const DIR_A = IS_WINDOWS ? "C:\\proj" : "/proj";
+const DIR_B = IS_WINDOWS ? "D:\\lib" : "/lib";
+const UNC_FIXTURES = IS_WINDOWS ? ["\\\\host\\share", "\\\\?\\C:\\Windows"] : ["//server/share"];
+
 function baseSpec(overrides: Partial<RunSpec> = {}): RunSpec {
   return {
     allowedTools: ["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
@@ -45,7 +52,7 @@ describe("buildClaudeArgs", () => {
       sessionId: SESSION_ID,
       appendSystemPrompt: "advisor role text",
       budgetUsd: 1.5,
-      addDirs: ["C:\\proj", "D:\\lib"]
+      addDirs: [DIR_A, DIR_B]
     }));
     expect(args).toEqual([
       "-p", "--output-format", "json", "--permission-mode", "default",
@@ -55,8 +62,8 @@ describe("buildClaudeArgs", () => {
       "-r", SESSION_ID,
       "--append-system-prompt", "advisor role text",
       "--max-budget-usd", "1.5",
-      "--add-dir", "C:\\proj",
-      "--add-dir", "D:\\lib"
+      "--add-dir", DIR_A,
+      "--add-dir", DIR_B
     ]);
   });
 
@@ -74,8 +81,9 @@ describe("buildClaudeArgs", () => {
   });
 
   it("rejects UNC and device add-dir paths as defense in depth", () => {
-    expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: ["\\\\host\\share"] })), "UNC");
-    expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: ["\\\\?\\C:\\Windows"] })), "UNC");
+    for (const uncPath of UNC_FIXTURES) {
+      expectInvalidInput(() => buildClaudeArgs(baseSpec({ addDirs: [uncPath] })), "UNC");
+    }
   });
 
   it("rejects non-positive budgets", () => {
@@ -89,7 +97,7 @@ describe("buildClaudeArgs", () => {
   });
 
   it("never emits forbidden flags or write-capable tools", () => {
-    const rendered = buildClaudeArgs(baseSpec({ model: "opus", sessionId: SESSION_ID, budgetUsd: 2, addDirs: ["C:\\proj"] })).join(" ");
+    const rendered = buildClaudeArgs(baseSpec({ model: "opus", sessionId: SESSION_ID, budgetUsd: 2, addDirs: [DIR_A] })).join(" ");
     for (const forbidden of ["--max-turns", "bypassPermissions", "acceptEdits", "--dangerously-skip-permissions", "Write", "Edit", "Bash"]) {
       expect(rendered).not.toContain(forbidden);
     }
