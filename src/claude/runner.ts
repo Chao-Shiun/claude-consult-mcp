@@ -18,6 +18,7 @@ export interface RunnerRequest {
   readonly addDirs?: readonly string[] | undefined;
   readonly cwd?: string | undefined;
   readonly depth?: "standard" | "deep" | undefined;
+  readonly signal?: AbortSignal | undefined;
 }
 
 export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
@@ -65,6 +66,16 @@ function applyDepthGuidance(prompt: string, depth: RunnerRequest["depth"]): stri
   return depth === "deep" ? `${prompt}\n\n${DEEP_RESEARCH_GUIDANCE}` : prompt;
 }
 
+function cancellationError(): ClaudeConsultError {
+  return new ClaudeConsultError("REQUEST_CANCELLED", "the tool call was cancelled by the caller before claude finished", "no action needed; re-issue the call if the cancellation was accidental");
+}
+
+function throwIfCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw cancellationError();
+  }
+}
+
 export function createRunner(deps: RunnerDeps): Runner {
   const semaphore = createSemaphore(deps.config.maxConcurrency);
   const inFlight = new Set<() => void>();
@@ -77,6 +88,7 @@ export function createRunner(deps: RunnerDeps): Runner {
   };
 
   const run = async (request: RunnerRequest): Promise<ClaudeEnvelope> => {
+    throwIfCancelled(request.signal);
     const prompt = applyDepthGuidance(request.prompt, request.depth);
     validatePrompt(prompt);
     const allowedTools = resolveAllowedTools(deps.config, request.depth);
@@ -97,14 +109,44 @@ export function createRunner(deps: RunnerDeps): Runner {
       : Object.freeze({ ...deps.baseEnv, [CHILD_ENV_MAX_THINKING_TOKENS]: String(deps.config.maxThinkingTokens) });
     const cwd = request.cwd ?? deps.defaultCwd;
     deps.logger.info(`running claude (model: ${policy.model ?? "cli-default"}, cwd: ${cwd})`);
-    const raw = await semaphore.withPermit(() => deps.spawnImpl({
-      binPath,
-      args,
-      prompt,
-      cwd,
-      env,
-      timeoutMs: deps.config.timeoutMs
-    }, registerChild));
+    let abortListener: (() => void) | undefined;
+    const removeAbortListener = (): void => {
+      if (abortListener !== undefined) {
+        request.signal?.removeEventListener("abort", abortListener);
+        abortListener = undefined;
+      }
+    };
+    const registerAbortableChild = (kill: () => void): (() => void) => {
+      const unregisterChild = registerChild(kill);
+      if (request.signal !== undefined) {
+        abortListener = () => kill();
+        request.signal.addEventListener("abort", abortListener, { once: true });
+        if (request.signal.aborted) {
+          kill();
+        }
+      }
+      return () => {
+        removeAbortListener();
+        unregisterChild();
+      };
+    };
+    const raw = await semaphore.withPermit(async () => {
+      throwIfCancelled(request.signal);
+      try {
+        const result = await deps.spawnImpl({
+          binPath,
+          args,
+          prompt,
+          cwd,
+          env,
+          timeoutMs: deps.config.timeoutMs
+        }, registerAbortableChild);
+        throwIfCancelled(request.signal);
+        return result;
+      } finally {
+        removeAbortListener();
+      }
+    });
     return parseClaudeOutput(raw);
   };
 

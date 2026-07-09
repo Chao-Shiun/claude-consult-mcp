@@ -8,6 +8,7 @@ describe("errors", () => {
       "CLAUDE_NOT_AUTHENTICATED",
       "CLAUDE_SPAWN_FAILED",
       "CLAUDE_TIMEOUT",
+      "REQUEST_CANCELLED",
       "CLAUDE_NONZERO_EXIT",
       "CLAUDE_MALFORMED_OUTPUT",
       "CLAUDE_RESULT_ERROR",

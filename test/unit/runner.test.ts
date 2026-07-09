@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config.js";
 import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
@@ -22,6 +22,10 @@ function successRaw(result = "pong"): RawRunOutput {
 interface Harness {
   spawnRequests: SpawnClaudeRequest[];
   deps: RunnerDeps;
+}
+
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function makeHarness(env: Record<string, string> = {}, spawnImpl?: RunnerDeps["spawnImpl"]): Harness {
@@ -137,6 +141,83 @@ describe("createRunner", () => {
     await expectCode(runner.run({ prompt: "   " }), "INVALID_INPUT");
     await expectCode(runner.run({ prompt: "x".repeat(400_001) }), "INVALID_INPUT");
     expect(harness.spawnRequests).toHaveLength(0);
+  });
+
+  it("rejects a pre-cancelled request before locating or spawning claude", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let locateCalls = 0;
+    const harness = makeHarness();
+    const runner = createRunner({
+      ...harness.deps,
+      locate: async () => {
+        locateCalls += 1;
+        return "C:\\bin\\claude.cmd";
+      }
+    });
+    await expectCode(runner.run({ prompt: "cancelled", signal: controller.signal }), "REQUEST_CANCELLED");
+    expect(locateCalls).toBe(0);
+    expect(harness.spawnRequests).toHaveLength(0);
+  });
+
+  it("kills the child once on mid-run abort and reports REQUEST_CANCELLED", async () => {
+    const controller = new AbortController();
+    let kills = 0;
+    const harness = makeHarness({}, (_request, onSpawned) =>
+      new Promise<RawRunOutput>((resolve) => {
+        let unregister: (() => void) | undefined;
+        unregister = onSpawned(() => {
+          kills += 1;
+          unregister?.();
+          resolve({ stdout: "", stderrTail: "killed after abort", exitCode: 1 });
+        });
+      }));
+    const runner = createRunner(harness.deps);
+    const pending = runner.run({ prompt: "long analysis", signal: controller.signal });
+    await flush();
+    controller.abort();
+    await expectCode(pending, "REQUEST_CANCELLED");
+    expect(kills).toBe(1);
+  });
+
+  it("removes the abort listener after a normal completion", async () => {
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+    let kills = 0;
+    const harness = makeHarness({}, (_request, onSpawned) => {
+      onSpawned(() => {
+        kills += 1;
+      });
+      return Promise.resolve(successRaw());
+    });
+    const runner = createRunner(harness.deps);
+    await runner.run({ prompt: "quick analysis", signal: controller.signal });
+    expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
+    controller.abort();
+    expect(kills).toBe(0);
+  });
+
+  it("releases the semaphore permit after a queued cancelled run", async () => {
+    let finishFirst: (() => void) | undefined;
+    const controller = new AbortController();
+    const harness = makeHarness({ CLAUDE_CONSULT_MAX_CONCURRENCY: "1" }, (request) => {
+      if (request.prompt === "first") {
+        return new Promise((resolve) => {
+          finishFirst = () => resolve(successRaw("first"));
+        });
+      }
+      return Promise.resolve(successRaw(request.prompt));
+    });
+    const runner = createRunner(harness.deps);
+    const first = runner.run({ prompt: "first" });
+    await flush();
+    const second = runner.run({ prompt: "second", signal: controller.signal });
+    controller.abort();
+    finishFirst?.();
+    await first;
+    await expectCode(second, "REQUEST_CANCELLED");
+    await expect(runner.run({ prompt: "third" })).resolves.toMatchObject({ result: "third" });
+    expect(harness.spawnRequests.map((request) => request.prompt)).toEqual(["first", "third"]);
   });
 
   it("rejects models outside the whitelist before spawning", async () => {
