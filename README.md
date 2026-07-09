@@ -16,7 +16,7 @@ MCP stdio server (this package)
 claude -p --output-format json   (your existing Claude Code login)
 ```
 
-Verified against: Claude Code CLI `2.1.163`, Codex CLI `0.142.0`, MCP SDK `1.x`.
+Verified in release tests against: Claude Code CLI `2.1.163`, Codex CLI `0.142.0`, MCP SDK `1.x`.
 
 ## Prerequisites
 
@@ -199,7 +199,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_MODEL` | `opus` | Default model; empty string = follow the claude CLI default |
 | `CLAUDE_CONSULT_ALLOWED_MODELS` | unlimited | Comma-separated model whitelist ceiling |
 | `CLAUDE_CONSULT_CAPABILITY` | `research` | `readonly`, `research`, or `deep-research` |
-| `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override (never write-capable) |
+| `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override; exact `Write`, `Edit`, `NotebookEdit`, and `Bash` tokens are rejected |
 | `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
 | `CLAUDE_CONSULT_JOURNAL_DIR` | disabled | Local absolute directory for opt-in metadata-only JSONL journal files |
@@ -211,11 +211,11 @@ Set them at registration time so they live in the Codex config: `npx -y claude-c
 
 ## Security notes
 
-- Read-only by design: no write-capable tool can ever reach the child process; permission mode is never bypassed.
+- Read-only by design: the exact Claude Code write/execute tool tokens `Write`, `Edit`, `NotebookEdit`, and `Bash` are always rejected before the child process is spawned; permission mode is never bypassed.
 - The `deep-research` tier adds only the verified `Agent` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
 - The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
-- No credentials are stored, read, or transmitted by this package; the claude CLI uses its own login on each machine.
+- No credentials are stored by this package. The child Claude process uses the machine's existing Claude Code login and inherits the server process environment like a normal child process.
 - Diagnostics go to stderr only; stdout is reserved for the MCP protocol.
 - On timeout or shutdown the whole claude process tree is terminated (taskkill on Windows, process-group signals on POSIX) so no orphan processes are left behind.
 - UNC and device paths (`\\host\share`, `\\?\...`, `//server/share`) are rejected before any filesystem access, so a prompt-injected Codex cannot use `claude_review_files` to force NTLM authentication to a remote host.
