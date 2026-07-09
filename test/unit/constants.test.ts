@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, SUBAGENT_TOOL_TOKEN, VERSION } from "../../src/constants.js";
+import { CAPABILITIES, CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, CODEX_SERVER_ID, DEFAULTS, EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FOOTER_PREFIX, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, SERVER_NAME, SUBAGENT_TOOL_TOKEN, VERIFIED_CLAUDE_VERSION, VERSION } from "../../src/constants.js";
 
 describe("constants", () => {
   it("exposes package identity values", () => {
@@ -9,6 +9,7 @@ describe("constants", () => {
     expect(FOOTER_PREFIX).toBe("[claude-consult]");
     expect(CHILD_ENV_MAX_THINKING_TOKENS).toBe("MAX_THINKING_TOKENS");
     expect(FABLE_MODEL_MARKER).toBe("fable");
+    expect(VERIFIED_CLAUDE_VERSION).toBe("2.1.163");
   });
 
   it("defines the exact environment variable names", () => {

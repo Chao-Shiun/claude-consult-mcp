@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runDoctor, type DoctorDeps } from "../../src/cli/doctor.js";
+import { VERIFIED_CLAUDE_VERSION } from "../../src/constants.js";
 
 interface DepsOptions {
   platform?: string;
@@ -51,8 +52,30 @@ describe("runDoctor", () => {
     const output = lines.join("\n");
     expect(output).toContain("[ok] node v24.13.0");
     expect(output).toContain("[ok] claude 2.1.163");
+    expect(output).not.toContain("[warn] claude version");
     expect(output).toContain("[ok] codex codex-cli 0.142.0");
     expect(output).toContain("[ok] registered in ~/.codex/config.toml");
+  });
+
+  it("does not warn when the claude version matches the verified version", async () => {
+    const { lines, deps } = makeDeps({ claudeResult: { exitCode: 0, stdout: `Claude Code ${VERIFIED_CLAUDE_VERSION}`, stderr: "" }, configText: REGISTERED_WIN });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines.join("\n")).not.toContain("[warn] claude version");
+  });
+
+  it("warns without failing when the claude version differs from the verified version", async () => {
+    const { lines, deps } = makeDeps({ claudeResult: { exitCode: 0, stdout: "Claude Code 2.2.0", stderr: "" }, configText: REGISTERED_WIN });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines).toContain(`[warn] claude version 2.2.0 differs from the verified ${VERIFIED_CLAUDE_VERSION}; if tools misbehave, check for envelope or flag changes in the newer CLI`);
+  });
+
+  it("warns with unknown without changing the exit code when the claude version is unparseable", async () => {
+    const { lines, deps } = makeDeps({ claudeResult: { exitCode: 0, stdout: "Claude Code nightly", stderr: "" }, configText: REGISTERED_WIN });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines).toContain(`[warn] claude version unknown differs from the verified ${VERIFIED_CLAUDE_VERSION}; if tools misbehave, check for envelope or flag changes in the newer CLI`);
   });
 
   it("fails with an install hint when claude is missing", async () => {

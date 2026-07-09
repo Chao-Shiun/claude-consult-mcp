@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CODEX_SERVER_ID, SERVER_NAME } from "../constants.js";
+import { CODEX_SERVER_ID, SERVER_NAME, VERIFIED_CLAUDE_VERSION } from "../constants.js";
 import { loadConfig } from "../config.js";
 import { isClaudeConsultError, toDisplayText } from "../errors.js";
 import { createLogger } from "../logger.js";
@@ -29,6 +29,10 @@ function extractSection(config: string, header: string): string {
   return nextSection === -1 ? rest : rest.slice(0, nextSection);
 }
 
+function extractClaudeVersion(versionOutput: string): string {
+  return versionOutput.match(/\d+\.\d+\.\d+/u)?.[0] ?? "unknown";
+}
+
 export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Promise<number> {
   const live = argv.includes("--live");
   let fails = 0;
@@ -50,6 +54,10 @@ export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Prom
     const claude = await deps.runCommand("claude", ["--version"]);
     if (claude.exitCode === 0) {
       ok(`claude ${claude.stdout.trim()}`);
+      const foundVersion = extractClaudeVersion(claude.stdout);
+      if (foundVersion !== VERIFIED_CLAUDE_VERSION) {
+        warn(`claude version ${foundVersion} differs from the verified ${VERIFIED_CLAUDE_VERSION}; if tools misbehave, check for envelope or flag changes in the newer CLI`);
+      }
     } else {
       fail(`claude --version exited with ${claude.exitCode}: ${claude.stderr.trim()}`);
     }
