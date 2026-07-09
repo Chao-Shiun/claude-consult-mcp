@@ -8,6 +8,7 @@ import { dispatch } from "./dispatch.js";
 import { runCommand } from "./run-command.js";
 import { runSetup } from "./cli/setup.js";
 import { createDefaultDoctorDeps, runDoctor } from "./cli/doctor.js";
+import { createDefaultReviewGateDeps, runReviewGate } from "./cli/review-gate.js";
 
 function printOut(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
       server: serverMain,
       setup: (args) => runSetup(args, { platform: process.platform, runCommand, print: printOut }),
       doctor: (args) => runDoctor(args, createDefaultDoctorDeps(printOut)),
+      reviewGate: (args) => runReviewGate(args, createDefaultReviewGateDeps(printOut, printErr)),
       print: printOut
     });
     if (code !== 0) {

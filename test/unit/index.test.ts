@@ -20,6 +20,10 @@ function makeMains(): { calls: string[]; mains: Mains; lines: string[] } {
         calls.push(`doctor:${args.join(",")}`);
         return 0;
       },
+      reviewGate: async (args) => {
+        calls.push(`review-gate:${args.join(",")}`);
+        return 0;
+      },
       print: (line: string) => {
         lines.push(line);
       }
@@ -38,7 +42,8 @@ describe("dispatch", () => {
     const { calls, mains } = makeMains();
     await dispatch(["setup", "--model", "sonnet"], mains);
     await dispatch(["doctor", "--live"], mains);
-    expect(calls).toEqual(["setup:--model,sonnet", "doctor:--live"]);
+    await dispatch(["review-gate", "--quiet"], mains);
+    expect(calls).toEqual(["setup:--model,sonnet", "doctor:--live", "review-gate:--quiet"]);
   });
 
   it("prints the version for --version and -v", async () => {
@@ -53,6 +58,7 @@ describe("dispatch", () => {
     await expect(dispatch(["--help"], mains)).resolves.toBe(0);
     expect(lines.join("\n")).toContain("setup");
     expect(lines.join("\n")).toContain("doctor");
+    expect(lines.join("\n")).toContain("review-gate");
     await expect(dispatch(["frobnicate"], mains)).resolves.toBe(1);
     expect(calls).toEqual([]);
   });
