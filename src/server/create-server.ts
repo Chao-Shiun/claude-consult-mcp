@@ -10,6 +10,7 @@ import { createPanelTool } from "../tools/panel.js";
 import { createReviewDiffTool } from "../tools/review-diff.js";
 import { createReviewFilesTool } from "../tools/review-files.js";
 import { createSecondOpinionTool } from "../tools/second-opinion.js";
+import { createSessionsTool } from "../tools/sessions.js";
 import type { ConsultTool, ToolContext } from "../tools/shared-schemas.js";
 import { toErrorResult } from "../tools/tool-result.js";
 
@@ -41,7 +42,8 @@ export function createServer(deps: ServerDeps): McpServer {
     createPanelTool(context),
     createReviewFilesTool(context),
     createReviewDiffTool(context),
-    createContinueSessionTool(context)
+    createContinueSessionTool(context),
+    ...(deps.ledger === undefined ? [] : [createSessionsTool(deps.ledger)])
   ];
   for (const tool of tools) {
     server.registerTool(tool.name, {

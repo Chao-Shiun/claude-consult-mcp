@@ -6,6 +6,7 @@ import { createLogger } from "../../src/logger.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
 import { createServer } from "../../src/server/create-server.js";
+import { createSessionLedger, type SessionLedger } from "../../src/session-ledger.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const silentLogger = createLogger("silent", { write: () => true });
@@ -33,6 +34,7 @@ interface HarnessOptions {
   readonly runClaudeError?: unknown;
   readonly runClaude?: (request: RunnerRequest) => Promise<ClaudeEnvelope>;
   readonly progressHeartbeatMs?: number;
+  readonly ledger?: SessionLedger;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -40,7 +42,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function isHarnessOptions(value: unknown): value is HarnessOptions {
-  return value !== null && typeof value === "object" && ("runClaude" in value || "runClaudeError" in value || "progressHeartbeatMs" in value);
+  return value !== null && typeof value === "object" && ("runClaude" in value || "runClaudeError" in value || "progressHeartbeatMs" in value || "ledger" in value);
 }
 
 async function startHarness(optionsOrError?: HarnessOptions | unknown): Promise<TestHarness> {
@@ -55,7 +57,7 @@ async function startHarness(optionsOrError?: HarnessOptions | unknown): Promise<
     }
     return options.runClaude === undefined ? FIXTURE_ENVELOPE : options.runClaude(request);
   };
-  const server = createServer({ runClaude, logger: silentLogger, progressHeartbeatMs: options.progressHeartbeatMs });
+  const server = createServer({ runClaude, logger: silentLogger, progressHeartbeatMs: options.progressHeartbeatMs, ledger: options.ledger ?? createSessionLedger() });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "protocol-test", version: "0.0.1" });
   let stdoutWrites = 0;
@@ -98,11 +100,11 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
   });
 
-  it("lists exactly the eight consult tools with steering schemas", async () => {
+  it("lists exactly the nine consult tools with steering schemas", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
+    expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const ask = listed.tools.find((tool) => tool.name === "ask_claude");
     expect(ask?.description).toContain("advisory only");
     expect(ask?.description).toContain("claude_panel");
@@ -131,6 +133,10 @@ describe("MCP protocol layer", () => {
     expect((debateOpen?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["evidence", "position", "topic", "workspace_dir"]);
     const debateReply = listed.tools.find((tool) => tool.name === "claude_debate_reply");
     expect(debateReply?.description).toContain("format: prose");
+    const sessions = listed.tools.find((tool) => tool.name === "claude_sessions");
+    expect(sessions?.description).toContain("List recent Claude conversations");
+    const sessionProperties = (sessions?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect(Object.keys(sessionProperties).sort()).toEqual(["limit", "workspace_dir"]);
   });
 
   it("returns the answer with the footer on a successful call", async () => {
@@ -231,5 +237,13 @@ describe("MCP protocol layer", () => {
     controller.abort();
     await expect(call.catch((error: unknown) => error)).resolves.toBeDefined();
     expect(observedSignal?.aborted).toBe(true);
+  });
+
+  it("lists sessions without invoking the Claude runner", async () => {
+    harness = await startHarness();
+    const result = await harness.client.callTool({ name: "claude_sessions", arguments: {} });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]?.text).toBe("No conversations recorded since this MCP server started.");
+    expect(harness.requests).toHaveLength(0);
   });
 });
