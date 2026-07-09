@@ -10,7 +10,8 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  9 tools, zod-validated, read-only allowlist, injection-hardened argv
+   |  9 tools by default; 10 with the opt-in consultation journal
+   |  zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
 ```
@@ -62,7 +63,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The nine tools
+## The tools: nine by default, ten with journal
 
 | Tool | Use it for | Required args |
 |---|---|---|
@@ -75,12 +76,15 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
 | `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |
+| `claude_consult_history` | Recover past consultation metadata from the opt-in machine journal across Codex sessions and server restarts | none (optional `workspace_dir`, `limit`) |
 
 `claude_continue` also accepts `stance: "critical"` for follow-ups after an adversarial review or debate so Claude keeps its reviewer discipline.
 
-Claude-calling tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations. `claude_sessions` reads only the in-memory metadata ledger; it never invokes Claude.
+Claude-calling tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations. `claude_sessions` reads only the in-memory metadata ledger; `claude_consult_history` reads only the opt-in journal. Neither tool invokes Claude.
 
 Losing a session? Call `claude_sessions` to list recent conversations from this server process, newest first, then pass the recovered `session_id` and same `workspace_dir` to `claude_continue`.
+
+Want recall across restarts? Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute directory path. The server then registers `claude_consult_history`, which lists journal entries newest first and can filter by exact `workspace_dir`.
 
 Every successful result ends with a machine-readable footer:
 
@@ -90,6 +94,14 @@ Every successful result ends with a machine-readable footer:
 ```
 
 Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
+
+### Consultation journal
+
+The journal is opt-in. Nothing is written unless `CLAUDE_CONSULT_JOURNAL_DIR` is set to a valid local absolute path; relative, UNC, and device paths are rejected. Journal files are JSONL, one file per month named `consult-journal-YYYY-MM.jsonl` under that directory.
+
+Entries are metadata only: ISO timestamp, originating tool, Claude `session_id`, workspace directory when present, model when present, a whitespace-collapsed topic excerpt capped at 120 characters, total cost, and duration. The journal never stores full prompts, file contents, or Claude answers. Write failures are logged to stderr and swallowed, so a disk problem cannot fail the consultation.
+
+`claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
 ### Gate your actions on Claude's verdict
 
@@ -121,6 +133,29 @@ If Claude returns a `Questions for you:` section or a structured `questions_for_
 For implemented changes, use `claude_review_diff` so Claude reviews the actual git diff instead of only a summary. Clients that support MCP progress see a heartbeat during long calls.
 
 Example Codex prompt: `"Verify this plan with claude_panel using the security and correctness perspectives."`
+
+### Automatic review gate
+
+`claude-consult-mcp review-gate` reviews the current git worktree's uncommitted `HEAD` diff with Claude. It uses hardened git diff flags (`--no-ext-diff --no-textconv`), includes `git status --porcelain`, runs through the same advisory runner as the MCP tools, and records origin metadata as `review-gate` so the in-memory ledger and opt-in journal can show the run.
+
+The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs, missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
+
+The default gate model is `haiku` because the hook can run after many turns. Override it per run with `--model <m>` or set `CLAUDE_CONSULT_GATE_MODEL`; the flag wins over the environment variable. Use `--quiet` to suppress the exact `LGTM` case:
+
+```bash
+npx -y claude-consult-mcp review-gate --quiet
+```
+
+To install it as a Codex stop hook:
+
+```bash
+npx -y claude-consult-mcp setup --install-review-gate
+npx -y claude-consult-mcp setup --remove-review-gate
+```
+
+Setup edits `~/.codex/hooks.json`, creates a timestamped `hooks.json.bak-YYYYMMDDHHMMSS` backup before modifying an existing hooks file, preserves unrelated hooks, and replaces an existing `claude-consult-mcp review-gate` entry instead of duplicating it. On first use after install, Codex may ask you to trust the changed hook source; review and approve it through Codex's hook trust flow (for example `/hooks` in clients that expose it). Do not use a bypass flag for normal operation.
+
+Phase 0 discovery on this machine found Codex stop hooks are feasible but their passive output was not visibly surfaced in `codex exec`; the installed hook still runs from the repository cwd and receives Codex's Stop JSON payload. For dependable history, enable `CLAUDE_CONSULT_JOURNAL_DIR` and inspect automatic gate runs with `claude_consult_history`, or run `review-gate` manually when you need immediate terminal output.
 
 ### Evidence debate workflow
 
@@ -167,6 +202,8 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override (never write-capable) |
 | `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
+| `CLAUDE_CONSULT_JOURNAL_DIR` | disabled | Local absolute directory for opt-in metadata-only JSONL journal files |
+| `CLAUDE_CONSULT_GATE_MODEL` | `haiku` for `review-gate` | Default model for the review-gate CLI; `--model` overrides it |
 | `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
 | `CLAUDE_CONSULT_LOG_LEVEL` | `info` | `silent` / `error` / `info` / `debug` (stderr only) |
 
@@ -200,6 +237,9 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | `[CLAUDE_TIMEOUT]` | Raise `CLAUDE_CONSULT_TIMEOUT_MS` (default 600000) |
 | Server never starts on Windows | The registration must launch `cmd /c npx ...`; run `doctor` to detect this, or re-run `setup` |
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
+| `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
+| Review gate hook output is not visible | This matches the Codex stop-hook behavior observed for v0.6; enable the journal and inspect entries with `claude_consult_history`, or run `npx -y claude-consult-mcp review-gate` manually |
+| Remove review gate hook | `npx -y claude-consult-mcp setup --remove-review-gate` |
 | Uninstall | `codex mcp remove claude-consult` |
 
 ## Development
