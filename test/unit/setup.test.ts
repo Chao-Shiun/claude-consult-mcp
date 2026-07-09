@@ -4,6 +4,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runSetup, type SetupDeps } from "../../src/cli/setup.js";
 
+const GATE_LOG = process.platform === "win32" ? "C:\\logs\\review-gate.log" : "/logs/review-gate.log";
+const GATE_LOG_WITH_SPACE = process.platform === "win32" ? "C:\\logs with space\\review-gate.log" : "/logs with space/review-gate.log";
+const POSIX_GATE_LOG_VALUE = process.platform === "win32" ? `'${GATE_LOG}'` : GATE_LOG;
+const JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/journal";
+const RELATIVE_LOG = process.platform === "win32" ? "logs\\review-gate.log" : "logs/review-gate.log";
+const UNC_LOG = process.platform === "win32" ? "\\\\server\\share\\review-gate.log" : "//server/share/review-gate.log";
+
 interface Recorded {
   commands: Array<{ command: string; args: readonly string[] }>;
   lines: string[];
@@ -53,6 +60,13 @@ async function readHooks(homeDir: string): Promise<Record<string, unknown>> {
 
 function countReviewGateCommands(value: unknown): number {
   return JSON.stringify(value).match(/claude-consult-mcp review-gate/g)?.length ?? 0;
+}
+
+function reviewGateCommands(value: unknown): string[] {
+  const hooks = value as { hooks?: { Stop?: Array<{ hooks?: Array<{ command?: unknown }> }> } };
+  return (hooks.hooks?.Stop ?? [])
+    .flatMap((group) => group.hooks ?? [])
+    .flatMap((hook) => typeof hook.command === "string" && hook.command.includes("claude-consult-mcp review-gate") ? [hook.command] : []);
 }
 
 describe("runSetup", () => {
@@ -134,8 +148,51 @@ describe("runSetup", () => {
           }]
         }
       });
-      expect(recorded.lines).toEqual(["Installed the review gate as a Codex stop hook. Codex will ask you to trust the new hook on first use; the gate reviews uncommitted changes after each turn and stays silent when everything looks sound. Remove it anytime with: npx -y claude-consult-mcp setup --remove-review-gate"]);
+      expect(recorded.lines).toEqual([
+        "Installed the review gate as a Codex stop hook. Codex will ask you to trust the new hook on first use; the gate reviews uncommitted changes after each turn and stays silent when everything looks sound. Remove it anytime with: npx -y claude-consult-mcp setup --remove-review-gate",
+        "Review-gate findings will only be durable if Codex already passes CLAUDE_CONSULT_GATE_LOG or CLAUDE_CONSULT_JOURNAL_DIR to hooks; prefer setup --install-review-gate --gate-log <absolute-path>."
+      ]);
       expect(recorded.commands).toEqual([]);
+    });
+  });
+
+  it("installs the review gate with an embedded Windows gate log env var", async () => {
+    await withTempHome(async (homeDir) => {
+      const { deps } = makeFileDeps("win32", homeDir);
+
+      await expect(runSetup(["--install-review-gate", "--gate-log", GATE_LOG], deps)).resolves.toBe(0);
+
+      expect(reviewGateCommands(await readHooks(homeDir))).toEqual([`cmd /c set "CLAUDE_CONSULT_GATE_LOG=${GATE_LOG}" && npx -y claude-consult-mcp review-gate`]);
+    });
+  });
+
+  it("installs the review gate with an embedded POSIX gate log env var", async () => {
+    await withTempHome(async (homeDir) => {
+      const { deps } = makeFileDeps("linux", homeDir);
+
+      await expect(runSetup(["--install-review-gate", "--gate-log", GATE_LOG], deps)).resolves.toBe(0);
+
+      expect(reviewGateCommands(await readHooks(homeDir))).toEqual([`env CLAUDE_CONSULT_GATE_LOG=${POSIX_GATE_LOG_VALUE} npx -y claude-consult-mcp review-gate`]);
+    });
+  });
+
+  it("quotes embedded POSIX env var values with spaces", async () => {
+    await withTempHome(async (homeDir) => {
+      const { deps } = makeFileDeps("linux", homeDir);
+
+      await expect(runSetup(["--install-review-gate", "--gate-log", GATE_LOG_WITH_SPACE], deps)).resolves.toBe(0);
+
+      expect(reviewGateCommands(await readHooks(homeDir))).toEqual([`env CLAUDE_CONSULT_GATE_LOG='${GATE_LOG_WITH_SPACE}' npx -y claude-consult-mcp review-gate`]);
+    });
+  });
+
+  it("installs the review gate with an embedded journal dir env var", async () => {
+    await withTempHome(async (homeDir) => {
+      const { deps } = makeFileDeps("win32", homeDir);
+
+      await expect(runSetup(["--install-review-gate", "--journal-dir", JOURNAL_DIR], deps)).resolves.toBe(0);
+
+      expect(reviewGateCommands(await readHooks(homeDir))).toEqual([`cmd /c set "CLAUDE_CONSULT_JOURNAL_DIR=${JOURNAL_DIR}" && npx -y claude-consult-mcp review-gate`]);
     });
   });
 
@@ -169,10 +226,11 @@ describe("runSetup", () => {
       const { deps } = makeFileDeps("win32", homeDir);
 
       await runSetup(["--install-review-gate"], deps);
-      await runSetup(["--install-review-gate"], deps);
+      await runSetup(["--install-review-gate", "--gate-log", GATE_LOG], deps);
       const hooks = await readHooks(homeDir);
 
       expect(countReviewGateCommands(hooks)).toBe(1);
+      expect(JSON.stringify(hooks)).toContain("CLAUDE_CONSULT_GATE_LOG");
       expect(JSON.stringify(hooks)).toContain("node existing.js");
       const backups = await readdir(codexDir);
       expect(backups.filter((name) => name === "hooks.json.bak-20260709123456")).toHaveLength(1);
@@ -182,11 +240,23 @@ describe("runSetup", () => {
   it("removes exactly the review gate hook", async () => {
     await withTempHome(async (homeDir) => {
       const { deps } = makeFileDeps("win32", homeDir);
-      await runSetup(["--install-review-gate"], deps);
+      await runSetup(["--install-review-gate", "--gate-log", GATE_LOG], deps);
 
       await expect(runSetup(["--remove-review-gate"], deps)).resolves.toBe(0);
 
       expect(countReviewGateCommands(await readHooks(homeDir))).toBe(0);
+    });
+  });
+
+  it("rejects relative or UNC review-gate log paths without writing hooks", async () => {
+    await withTempHome(async (homeDir) => {
+      const { recorded, deps } = makeFileDeps("win32", homeDir);
+
+      await expect(runSetup(["--install-review-gate", "--gate-log", RELATIVE_LOG], deps)).resolves.toBe(1);
+      await expect(runSetup(["--install-review-gate", "--journal-dir", UNC_LOG], deps)).resolves.toBe(1);
+
+      expect(recorded.lines.join("\n")).toContain("must be a local absolute path");
+      await expect(readFile(path.join(homeDir, ".codex", "hooks.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     });
   });
 

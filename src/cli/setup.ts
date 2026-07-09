@@ -18,6 +18,8 @@ interface SetupOptions {
   readonly allowedModels: string | undefined;
   readonly maxBudgetUsd: string | undefined;
   readonly reviewGateAction: "install" | "remove" | undefined;
+  readonly gateLog: string | undefined;
+  readonly journalDir: string | undefined;
 }
 
 function parseSetupArgs(argv: readonly string[]): SetupOptions | string {
@@ -26,6 +28,8 @@ function parseSetupArgs(argv: readonly string[]): SetupOptions | string {
   let allowedModels: string | undefined;
   let maxBudgetUsd: string | undefined;
   let reviewGateAction: "install" | "remove" | undefined;
+  let gateLog: string | undefined;
+  let journalDir: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--install-review-gate" || flag === "--remove-review-gate") {
@@ -69,14 +73,28 @@ function parseSetupArgs(argv: readonly string[]): SetupOptions | string {
         maxBudgetUsd = value;
         index += 1;
         break;
+      case "--gate-log":
+        gateLog = value;
+        index += 1;
+        break;
+      case "--journal-dir":
+        journalDir = value;
+        index += 1;
+        break;
       default:
-        return `unknown flag ${flag}; valid flags: --model, --capability, --allowed-models, --max-budget-usd, --install-review-gate, --remove-review-gate`;
+        return `unknown flag ${flag}; valid flags: --model, --capability, --allowed-models, --max-budget-usd, --install-review-gate, --remove-review-gate, --gate-log, --journal-dir`;
     }
   }
   if (reviewGateAction !== undefined && [model, capability, allowedModels, maxBudgetUsd].some((value) => value !== undefined)) {
     return "--install-review-gate and --remove-review-gate cannot be combined with MCP registration flags";
   }
-  return { model, capability, allowedModels, maxBudgetUsd, reviewGateAction };
+  if (reviewGateAction === undefined && (gateLog !== undefined || journalDir !== undefined)) {
+    return "--gate-log and --journal-dir require --install-review-gate";
+  }
+  if (reviewGateAction === "remove" && (gateLog !== undefined || journalDir !== undefined)) {
+    return "--remove-review-gate cannot be combined with --gate-log or --journal-dir";
+  }
+  return { model, capability, allowedModels, maxBudgetUsd, reviewGateAction, gateLog, journalDir };
 }
 
 function buildEnvPairs(options: SetupOptions): readonly string[] {
@@ -105,8 +123,38 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function commandFor(platform: string): string {
-  return platform === "win32" ? `cmd /c npx -y ${SERVER_NAME} review-gate` : `npx -y ${SERVER_NAME} review-gate`;
+function validLocalAbsolute(value: string): boolean {
+  return path.isAbsolute(value) && !PATTERNS.uncOrDevice.test(value);
+}
+
+function validateReviewGatePath(name: string, value: string | undefined): string | undefined {
+  if (value !== undefined && !validLocalAbsolute(value)) {
+    return `${name} must be a local absolute path, got "${value}"`;
+  }
+  return undefined;
+}
+
+function quotePosixEnvValue(value: string): string {
+  if (/^[A-Za-z0-9_/:=.,@%+-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function commandFor(platform: string, options: Pick<SetupOptions, "gateLog" | "journalDir">): string {
+  const vars: Array<readonly [string, string]> = [];
+  if (options.gateLog !== undefined) {
+    vars.push([ENV.gateLog, options.gateLog]);
+  }
+  if (options.journalDir !== undefined) {
+    vars.push([ENV.journalDir, options.journalDir]);
+  }
+  if (platform === "win32") {
+    const envPrefix = vars.map(([name, value]) => `set "${name}=${value}" && `).join("");
+    return `cmd /c ${envPrefix}npx -y ${SERVER_NAME} review-gate`;
+  }
+  const envPrefix = vars.length === 0 ? "" : `env ${vars.map(([name, value]) => `${name}=${quotePosixEnvValue(value)}`).join(" ")} `;
+  return `${envPrefix}npx -y ${SERVER_NAME} review-gate`;
 }
 
 function isReviewGateHook(value: unknown): boolean {
@@ -147,7 +195,7 @@ function removeReviewGateCommands(stopGroups: unknown[]): number {
   return removed;
 }
 
-function installReviewGateCommand(root: Record<string, unknown>, platform: string): string | undefined {
+function installReviewGateCommand(root: Record<string, unknown>, platform: string, options: Pick<SetupOptions, "gateLog" | "journalDir">): string | undefined {
   const hooks = getHooksObject(root);
   if (typeof hooks === "string") {
     return hooks;
@@ -158,7 +206,7 @@ function installReviewGateCommand(root: Record<string, unknown>, platform: strin
   }
   removeReviewGateCommands(stopGroups);
   const existingGroup = stopGroups.find((group) => isObject(group) && group.matcher === "" && Array.isArray(group.hooks));
-  const hook = { type: "command", command: commandFor(platform) };
+  const hook = { type: "command", command: commandFor(platform, options) };
   if (isObject(existingGroup) && Array.isArray(existingGroup.hooks)) {
     existingGroup.hooks.push(hook);
   } else {
@@ -211,7 +259,17 @@ async function writeHooksFile(root: Record<string, unknown>, hooksPath: string, 
   await writeFile(hooksPath, `${JSON.stringify(root, null, 2)}\n`, { encoding: "utf8" });
 }
 
-async function runReviewGateSetup(action: "install" | "remove", deps: SetupDeps): Promise<number> {
+async function runReviewGateSetup(options: SetupOptions, deps: SetupDeps): Promise<number> {
+  const action = options.reviewGateAction;
+  if (action === undefined) {
+    return 1;
+  }
+  for (const error of [validateReviewGatePath(ENV.gateLog, options.gateLog), validateReviewGatePath(ENV.journalDir, options.journalDir)]) {
+    if (error !== undefined) {
+      deps.print(`Invalid arguments: ${error}`);
+      return 1;
+    }
+  }
   const hooksPath = path.join(deps.homeDir ?? os.homedir(), ".codex", "hooks.json");
   const loaded = await readHooksFile(hooksPath);
   if (typeof loaded === "string") {
@@ -219,7 +277,7 @@ async function runReviewGateSetup(action: "install" | "remove", deps: SetupDeps)
     return 1;
   }
   const mutationError = action === "install"
-    ? installReviewGateCommand(loaded.root, deps.platform)
+    ? installReviewGateCommand(loaded.root, deps.platform, options)
     : removeReviewGateCommand(loaded.root);
   if (mutationError !== undefined) {
     deps.print(mutationError);
@@ -228,6 +286,9 @@ async function runReviewGateSetup(action: "install" | "remove", deps: SetupDeps)
   await writeHooksFile(loaded.root, hooksPath, loaded.existed, deps);
   if (action === "install") {
     deps.print("Installed the review gate as a Codex stop hook. Codex will ask you to trust the new hook on first use; the gate reviews uncommitted changes after each turn and stays silent when everything looks sound. Remove it anytime with: npx -y claude-consult-mcp setup --remove-review-gate");
+    if (options.gateLog === undefined && options.journalDir === undefined) {
+      deps.print("Review-gate findings will only be durable if Codex already passes CLAUDE_CONSULT_GATE_LOG or CLAUDE_CONSULT_JOURNAL_DIR to hooks; prefer setup --install-review-gate --gate-log <absolute-path>.");
+    }
   } else {
     deps.print("Removed the review gate Codex stop hook.");
   }
@@ -241,7 +302,7 @@ export async function runSetup(argv: readonly string[], deps: SetupDeps): Promis
     return 1;
   }
   if (parsed.reviewGateAction !== undefined) {
-    return runReviewGateSetup(parsed.reviewGateAction, deps);
+    return runReviewGateSetup(parsed, deps);
   }
   const launcher = deps.platform === "win32" ? ["cmd", "/c", "npx", "-y", SERVER_NAME] : ["npx", "-y", SERVER_NAME];
   const args = ["mcp", "add", CODEX_SERVER_ID, ...buildEnvPairs(parsed), "--", ...launcher];
