@@ -19,6 +19,7 @@ const SESSION_IDS = [
 function envelope(index: number, result = `answer ${index}`): ClaudeEnvelope {
   return Object.freeze({
     result,
+    structuredOutput: undefined,
     sessionId: SESSION_IDS[index] ?? SESSION_IDS[0],
     isError: false,
     subtype: undefined,

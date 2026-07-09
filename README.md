@@ -90,15 +90,23 @@ Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks 
 
 ### Gate your actions on Claude's verdict
 
-`claude_second_opinion` returns a JSON result body before the standard footer. Parse the body and gate the next action on `verdict` and `confidence`:
+`claude_second_opinion`, `claude_debate_open`, and `claude_debate_reply` request structured output, but Claude's schema compliance is model-dependent best-effort. Check the footer `format` field before parsing; `format: prose` means Claude answered directly and the body is wrapped for reading instead of JSON parsing:
 
 ```ts
 const text = result.content[0].text;
-const body = text.split("\n\n---\n")[0];
-const verdict = JSON.parse(body) as { verdict: "agree" | "partial" | "disagree"; confidence: number };
+const [body, footer = ""] = text.split("\n\n---\n");
+const format = footer.match(/\| format: (json|prose)\b/)?.[1];
 
-if (verdict.verdict === "disagree" || verdict.confidence < 0.7) {
-  // Re-check the evidence before committing to the change.
+if (format === "json") {
+  const verdict = JSON.parse(body) as { verdict: "agree" | "partial" | "disagree"; confidence: number };
+  if (verdict.verdict === "disagree" || verdict.confidence < 0.7) {
+    // Re-check the evidence before committing to the change.
+  }
+} else if (format === "prose") {
+  const prose = body.match(/<prose-answer>\n([\s\S]*)\n<\/prose-answer>/)?.[1] ?? body;
+  // Read prose directly, or retry once with model "sonnet" or "opus" if strict JSON fields are required.
+} else {
+  throw new Error("Claude result is missing a structured-output format footer.");
 }
 ```
 

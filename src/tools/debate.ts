@@ -3,7 +3,7 @@ import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { createExhibitBudget, extractFileExhibit, type NeutralExhibit } from "./exhibits.js";
 import { CRITICAL_REVIEWER_PROMPT } from "./second-opinion.js";
 import { absolutePathSchema, modelSchema, promptTextSchema, sessionIdSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
-import { toSuccessResult } from "./tool-result.js";
+import { STRUCTURED_FORMAT_DESCRIPTION, toSuccessResult } from "./tool-result.js";
 
 const EVIDENCE_TYPES = ["file", "url", "command_output", "reasoning"] as const;
 const REPLY_ACTIONS = ["accept", "rebut"] as const;
@@ -31,9 +31,9 @@ export const DEBATE_JSON_SCHEMA = JSON.stringify({
   required: ["claim_verifications", "counter_claims", "concessions", "remaining_disputes", "verdict", "confidence", "summary_markdown"]
 });
 
-const OPEN_DESCRIPTION = "Open a structured, evidence-based debate with Claude about a significant decision. Bring your position and your evidence (file references, URLs, command outputs). Claude will independently verify every verifiable item - reading the files and fetching the URLs itself - then return per-claim rulings and counter-claims with its own evidence. Expensive and slow (an agentic verification run); use it for architecture decisions, risky changes, and security-sensitive work, not routine questions. Continue rounds with claude_debate_reply. Claude only advises; it never modifies anything.";
+const OPEN_DESCRIPTION = `Open a structured, evidence-based debate with Claude about a significant decision. Bring your position and your evidence (file references, URLs, command outputs). Claude will independently verify every verifiable item - reading the files and fetching the URLs itself - then return per-claim rulings and counter-claims with its own evidence. Expensive and slow (an agentic verification run); use it for architecture decisions, risky changes, and security-sensitive work, not routine questions. Continue rounds with claude_debate_reply. Claude only advises; it never modifies anything. ${STRUCTURED_FORMAT_DESCRIPTION}`;
 
-const REPLY_DESCRIPTION = "Continue an open evidence debate. For each of Claude's counter-claims or rulings, either accept it (name it) or rebut it with an argument and new evidence. You are expected to have verified Claude's cited evidence yourself before rebutting. Rounds should converge: stop when remaining_disputes is empty or after three rounds, and report the per-claim outcome to the user.";
+const REPLY_DESCRIPTION = `Continue an open evidence debate. For each of Claude's counter-claims or rulings, either accept it (name it) or rebut it with an argument and new evidence. You are expected to have verified Claude's cited evidence yourself before rebutting. Rounds should converge: stop when remaining_disputes is empty or after three rounds, and report the per-claim outcome to the user. ${STRUCTURED_FORMAT_DESCRIPTION}`;
 
 const evidenceItemSchema = z.object({
   claim: promptTextSchema,
@@ -178,7 +178,7 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model
-      }));
+      }), { structuredExpected: true });
     }
   });
 }
@@ -206,7 +206,7 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
         cwd: args.workspace_dir,
         model: args.model,
         sessionId: args.session_id
-      }));
+      }), { structuredExpected: true });
     }
   });
 }

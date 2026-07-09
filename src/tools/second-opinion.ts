@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { commonToolShape, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
-import { toSuccessResult } from "./tool-result.js";
+import { STRUCTURED_FORMAT_DESCRIPTION, toSuccessResult } from "./tool-result.js";
 
 export const CRITICAL_REVIEWER_PROMPT = [
   "You are a critical second reviewer. Another AI coding agent produced the analysis under review.",
@@ -30,7 +30,7 @@ export const VERDICT_JSON_SCHEMA = JSON.stringify({
   required: ["verdict", "confidence", "claim_verifications", "flaws", "missed_considerations", "suggested_changes", "summary_markdown"]
 });
 
-const DESCRIPTION = "Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files. When you are asked to verify or review with sub-agents or multiple perspectives, include this tool as the independent cross-model reviewer alongside your own sub-agents; treat disagreements as high-signal. The result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown - parse it and gate your next action on verdict and confidence.";
+const DESCRIPTION = `Get an adversarial review of YOUR OWN analysis, plan, or conclusion before committing to it. Claude is explicitly instructed to hunt for flaws, wrong assumptions, missed edge cases, and simpler alternatives rather than agree. Use before risky changes, migrations, security-sensitive edits, or when your confidence is low. Provide the problem and your full reasoning - the more you show, the better the critique. Claude only critiques; it never modifies files. When you are asked to verify or review with sub-agents or multiple perspectives, include this tool as the independent cross-model reviewer alongside your own sub-agents; treat disagreements as high-signal. When the result footer reports format: json, the result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown. ${STRUCTURED_FORMAT_DESCRIPTION}`;
 
 const argsSchema = z.object({
   problem: promptTextSchema,
@@ -51,7 +51,7 @@ export function createSecondOpinionTool(toolContext: ToolContext): ConsultTool {
     execute: async (rawArgs: Record<string, unknown>) => {
       const args = argsSchema.parse(rawArgs);
       const prompt = `Another AI coding agent (OpenAI Codex) asks for an adversarial second opinion.\n\n<problem>\n${args.problem}\n</problem>\n\n<analysis-under-review>\n${args.analysis}\n</analysis-under-review>\n\nCritique the analysis as instructed in your system prompt.`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args) }));
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args) }), { structuredExpected: true });
     }
   });
 }

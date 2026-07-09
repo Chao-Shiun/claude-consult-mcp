@@ -13,6 +13,7 @@ const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "diff review",
+  structuredOutput: undefined,
   sessionId: SESSION_ID,
   isError: false,
   subtype: undefined,

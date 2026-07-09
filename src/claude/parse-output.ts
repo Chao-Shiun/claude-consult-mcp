@@ -10,6 +10,7 @@ export interface RawRunOutput {
 
 export interface ClaudeEnvelope {
   readonly result: string;
+  readonly structuredOutput: unknown;
   readonly sessionId: string;
   readonly isError: boolean;
   readonly subtype: string | undefined;
@@ -98,14 +99,16 @@ export function parseClaudeOutput(raw: RawRunOutput): ClaudeEnvelope {
   if (data.is_error === true) {
     throwEnvelopeError(data);
   }
-  const result = typeof data.result === "string" && data.result !== ""
-    ? data.result
-    : data.structured_output === undefined ? data.result : JSON.stringify(data.structured_output);
+  const hasStructuredOutput = data.structured_output !== undefined && data.structured_output !== null;
+  const result = hasStructuredOutput
+    ? JSON.stringify(data.structured_output)
+    : data.result;
   if (typeof result !== "string" || typeof data.session_id !== "string") {
     throw new ClaudeConsultError("CLAUDE_MALFORMED_OUTPUT", "claude envelope is missing result or session_id", "run `claude --version`; the JSON envelope shape may have changed in a newer CLI");
   }
   return Object.freeze({
     result,
+    structuredOutput: hasStructuredOutput ? data.structured_output : undefined,
     sessionId: data.session_id,
     isError: false,
     subtype: data.subtype ?? undefined,

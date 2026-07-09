@@ -25,6 +25,7 @@ describe("parseClaudeOutput", () => {
   it("parses a successful envelope into camelCase fields", () => {
     const envelope = parseClaudeOutput({ stdout: SUCCESS_ENVELOPE, stderrTail: "", exitCode: 0 });
     expect(envelope.result).toBe("pong");
+    expect(envelope.structuredOutput).toBeUndefined();
     expect(envelope.sessionId).toBe(SESSION_ID);
     expect(envelope.isError).toBe(false);
     expect(envelope.totalCostUsd).toBe(0.0512);
@@ -59,6 +60,14 @@ describe("parseClaudeOutput", () => {
     const body = `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"answer":"ok"},"session_id":"${SESSION_ID}","total_cost_usd":0.01}`;
     const envelope = parseClaudeOutput({ stdout: body, stderrTail: "", exitCode: 0 });
     expect(envelope.result).toBe('{"answer":"ok"}');
+    expect(envelope.structuredOutput).toEqual({ answer: "ok" });
+  });
+
+  it("treats structured_output as authoritative when result is also present", () => {
+    const body = `{"type":"result","subtype":"success","is_error":false,"result":"prose fallback","structured_output":{"answer":"ok"},"session_id":"${SESSION_ID}","total_cost_usd":0.01}`;
+    const envelope = parseClaudeOutput({ stdout: body, stderrTail: "", exitCode: 0 });
+    expect(envelope.result).toBe('{"answer":"ok"}');
+    expect(envelope.structuredOutput).toEqual({ answer: "ok" });
   });
 
   it("recovers the envelope from the last non-empty line when noise precedes it", () => {

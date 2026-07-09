@@ -12,6 +12,7 @@ const silentLogger = createLogger("silent", { write: () => true });
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "the answer",
+  structuredOutput: undefined,
   sessionId: SESSION_ID,
   isError: false,
   subtype: undefined,
@@ -107,6 +108,7 @@ describe("MCP protocol layer", () => {
     expect(ask?.description).toContain("claude_panel");
     const secondOpinion = listed.tools.find((tool) => tool.name === "claude_second_opinion");
     expect(secondOpinion?.description).toContain("sub-agents");
+    expect(secondOpinion?.description).toContain("format: prose");
     const reviewDiff = listed.tools.find((tool) => tool.name === "claude_review_diff");
     expect(reviewDiff?.description).toContain("actual code changes");
     expect((reviewDiff?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
@@ -125,7 +127,10 @@ describe("MCP protocol layer", () => {
     expect((panel?.inputSchema as { required?: string[] }).required).toEqual(["task"]);
     const debateOpen = listed.tools.find((tool) => tool.name === "claude_debate_open");
     expect(debateOpen?.description).toContain("Open a structured, evidence-based debate");
+    expect(debateOpen?.description).toContain("format: prose");
     expect((debateOpen?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["evidence", "position", "topic", "workspace_dir"]);
+    const debateReply = listed.tools.find((tool) => tool.name === "claude_debate_reply");
+    expect(debateReply?.description).toContain("format: prose");
   });
 
   it("returns the answer with the footer on a successful call", async () => {

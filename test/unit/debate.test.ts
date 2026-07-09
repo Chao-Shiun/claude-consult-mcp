@@ -11,9 +11,12 @@ import { CRITICAL_REVIEWER_PROMPT } from "../../src/tools/second-opinion.js";
 import type { ToolContext } from "../../src/tools/shared-schemas.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+const STRUCTURED_FORMAT_DESCRIPTION = 'Check the result footer\'s format field before parsing: format: json means the body is the requested JSON document; format: prose means Claude answered in prose instead - read it directly or retry with a stronger model rather than calling JSON.parse blindly.';
+const STRUCTURED_NOTICE = '[claude-consult] structured-output-notice: Claude answered in prose instead of the requested JSON. Read the answer below directly and extract what you need; if you strictly require the JSON fields, retry once with model "sonnet" or "opus", which follow output schemas more reliably.';
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "debate result",
+  structuredOutput: undefined,
   sessionId: SESSION_ID,
   isError: false,
   subtype: undefined,
@@ -54,7 +57,7 @@ describe("claude_debate_open tool", () => {
     const { requests, context } = makeContext();
     const tool = createDebateOpenTool(context);
 
-    await tool.execute({
+    const result = await tool.execute({
       topic: "Should we trust the cache invalidation patch?",
       position: "The patch is safe because the touched line only changes logging.",
       evidence: [{ claim: "The relevant code is only line 10.", type: "file", ref: "src/example.ts:10-11", content: "caller supplied note" }],
@@ -81,6 +84,11 @@ describe("claude_debate_open tool", () => {
     expect(request?.addDirs).toEqual([workspace]);
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
+    expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
+    const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
+    expect(text).toContain(STRUCTURED_NOTICE);
+    expect(text).toContain("<prose-answer>\ndebate result\n</prose-answer>");
+    expect(text).toContain("format: prose");
   });
 
   it("embeds unavailable exhibits for unsafe file references without leaking outside content", async () => {
@@ -149,7 +157,7 @@ describe("claude_debate_reply tool", () => {
     const { requests, context } = makeContext();
     const tool = createDebateReplyTool(context);
 
-    await tool.execute({
+    const result = await tool.execute({
       session_id: SESSION_ID,
       workspace_dir: workspace,
       responses: [
@@ -173,6 +181,11 @@ describe("claude_debate_reply tool", () => {
     expect(request?.appendSystemPrompt).toContain(CRITICAL_REVIEWER_PROMPT);
     expect(request?.appendSystemPrompt).toContain(DEBATE_REFEREE_PROMPT);
     expect(request?.jsonSchema).toBe(DEBATE_JSON_SCHEMA);
+    expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
+    const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
+    expect(text).toContain(STRUCTURED_NOTICE);
+    expect(text).toContain("<prose-answer>\ndebate result\n</prose-answer>");
+    expect(text).toContain("format: prose");
   });
 
   it("rejects invalid reply schemas before invoking Claude", async () => {

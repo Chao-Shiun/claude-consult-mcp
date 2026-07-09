@@ -4,10 +4,12 @@ import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import { formatFooter, toErrorResult, toSuccessResult } from "../../src/tools/tool-result.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+const STRUCTURED_NOTICE = '[claude-consult] structured-output-notice: Claude answered in prose instead of the requested JSON. Read the answer below directly and extract what you need; if you strictly require the JSON fields, retry once with model "sonnet" or "opus", which follow output schemas more reliably.';
 
 function envelope(overrides: Partial<ClaudeEnvelope> = {}): ClaudeEnvelope {
   return {
     result: "the answer",
+    structuredOutput: undefined,
     sessionId: SESSION_ID,
     isError: false,
     subtype: undefined,
@@ -29,11 +31,22 @@ describe("toSuccessResult", () => {
     expect(result.isError).toBeUndefined();
     expect(result.content).toHaveLength(1);
     expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`);
+    expect(result.content[0]?.text).not.toContain("format:");
   });
 
   it("renders missing metrics as n/a", () => {
     const result = toSuccessResult(envelope({ totalCostUsd: undefined, durationMs: undefined, numTurns: undefined }));
     expect(result.content[0]?.text).toContain(`session_id: ${SESSION_ID} | cost_usd: n/a | duration_ms: n/a | turns: n/a`);
+  });
+
+  it("marks structured schema-compliant results as json in the footer", () => {
+    const result = toSuccessResult(envelope({ result: '{"answer":"ok"}', structuredOutput: { answer: "ok" } }), { structuredExpected: true });
+    expect(result.content[0]?.text).toBe(`{"answer":"ok"}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json`);
+  });
+
+  it("marks prose schema fallbacks and wraps the answer with the exact notice", () => {
+    const result = toSuccessResult(envelope({ result: "plain answer" }), { structuredExpected: true });
+    expect(result.content[0]?.text).toBe(`${STRUCTURED_NOTICE}\n\n<prose-answer>\nplain answer\n</prose-answer>\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: prose`);
   });
 });
 

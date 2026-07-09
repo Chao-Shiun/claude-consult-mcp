@@ -14,6 +14,8 @@ import { createReviewFilesTool } from "../../src/tools/review-files.js";
 import { createContinueSessionTool } from "../../src/tools/continue-session.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+const STRUCTURED_FORMAT_DESCRIPTION = 'Check the result footer\'s format field before parsing: format: json means the body is the requested JSON document; format: prose means Claude answered in prose instead - read it directly or retry with a stronger model rather than calling JSON.parse blindly.';
+const STRUCTURED_NOTICE = '[claude-consult] structured-output-notice: Claude answered in prose instead of the requested JSON. Read the answer below directly and extract what you need; if you strictly require the JSON fields, retry once with model "sonnet" or "opus", which follow output schemas more reliably.';
 
 // workspace_dir must be absolute on the host platform; CI runs this suite on
 // Windows, macOS, and Linux.
@@ -21,6 +23,7 @@ const WORKSPACE_DIR = process.platform === "win32" ? "C:\\proj" : "/proj";
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "the answer",
+  structuredOutput: undefined,
   sessionId: SESSION_ID,
   isError: false,
   subtype: undefined,
@@ -103,7 +106,13 @@ describe("claude_second_opinion tool", () => {
     expect(request?.appendSystemPrompt).toContain("Verdict");
     expect(request?.appendSystemPrompt).toContain("not to be agreeable");
     expect(request?.jsonSchema).toBe(VERDICT_JSON_SCHEMA);
-    expect(tool.description).toContain("The result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown - parse it and gate your next action on verdict and confidence.");
+    expect(tool.description).toContain("When the result footer reports format: json, the result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown.");
+    expect(tool.description).not.toContain("parse it and gate your next action");
+    expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
+    const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
+    expect(text).toContain(STRUCTURED_NOTICE);
+    expect(text).toContain("<prose-answer>\nthe answer\n</prose-answer>");
+    expect(text).toContain("format: prose");
   });
 });
 
