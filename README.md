@@ -138,7 +138,9 @@ Example Codex prompt: `"Verify this plan with claude_panel using the security an
 
 `claude-consult-mcp review-gate` reviews the current git worktree's uncommitted `HEAD` diff with Claude. It uses hardened git diff flags (`--no-ext-diff --no-textconv`), includes `git status --porcelain`, runs through the same advisory runner as the MCP tools, and records origin metadata as `review-gate` so the in-memory ledger and opt-in journal can show the run.
 
-The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs, missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
+The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs exit 0 with stderr `review-gate: diff too large (N bytes), skipped`. Missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
+
+When it finds something to report, the gate records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`; it also prints them to stdout. Codex does not inject Stop-hook stdout into the next model turn's context. Treat automatic findings as out-of-band review notes: read the log file directly, or use the logged or journaled `session_id` with `claude_continue` for follow-up on that Claude conversation.
 
 The default gate model is `haiku` because the hook can run after many turns. Override it per run with `--model <m>` or set `CLAUDE_CONSULT_GATE_MODEL`; the flag wins over the environment variable. Use `--quiet` to suppress the exact `LGTM` case:
 
@@ -150,12 +152,14 @@ To install it as a Codex stop hook:
 
 ```bash
 npx -y claude-consult-mcp setup --install-review-gate
+npx -y claude-consult-mcp setup --install-review-gate --gate-log <absolute-path>
+npx -y claude-consult-mcp setup --install-review-gate --journal-dir <absolute-path>
 npx -y claude-consult-mcp setup --remove-review-gate
 ```
 
-Setup edits `~/.codex/hooks.json`, creates a timestamped `hooks.json.bak-YYYYMMDDHHMMSS` backup before modifying an existing hooks file, preserves unrelated hooks, and replaces an existing `claude-consult-mcp review-gate` entry instead of duplicating it. On first use after install, Codex may ask you to trust the changed hook source; review and approve it through Codex's hook trust flow (for example `/hooks` in clients that expose it). Do not use a bypass flag for normal operation.
+Setup edits `~/.codex/hooks.json`, creates a timestamped `hooks.json.bak-YYYYMMDDHHMMSS` backup before modifying an existing hooks file, preserves unrelated hooks, and replaces an existing `claude-consult-mcp review-gate` entry instead of duplicating it. Passing `--gate-log` or `--journal-dir` embeds the matching environment variable into the hook command; both paths must be local absolute paths. If neither flag is supplied, durable findings require Codex to already pass `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to hooks.
 
-Phase 0 discovery on this machine found Codex stop hooks are feasible but their passive output was not visibly surfaced in `codex exec`; the installed hook still runs from the repository cwd and receives Codex's Stop JSON payload. For dependable history, enable `CLAUDE_CONSULT_JOURNAL_DIR` and inspect automatic gate runs with `claude_consult_history`, or run `review-gate` manually when you need immediate terminal output.
+One-time trust: after `setup --install-review-gate`, Codex will not run the hook until you approve it once in an interactive Codex session. The trust prompt cannot be granted in headless `codex exec`. Review and approve the hook through Codex's hook trust flow when prompted.
 
 ### Evidence debate workflow
 
@@ -203,6 +207,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
 | `CLAUDE_CONSULT_JOURNAL_DIR` | disabled | Local absolute directory for opt-in metadata-only JSONL journal files |
+| `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |
 | `CLAUDE_CONSULT_GATE_MODEL` | `haiku` for `review-gate` | Default model for the review-gate CLI; `--model` overrides it |
 | `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
 | `CLAUDE_CONSULT_LOG_LEVEL` | `info` | `silent` / `error` / `info` / `debug` (stderr only) |
@@ -238,7 +243,7 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | Server never starts on Windows | The registration must launch `cmd /c npx ...`; run `doctor` to detect this, or re-run `setup` |
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
 | `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
-| Review gate hook output is not visible | This matches the Codex stop-hook behavior observed for v0.6; enable the journal and inspect entries with `claude_consult_history`, or run `npx -y claude-consult-mcp review-gate` manually |
+| Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>` and inspect the log out of band |
 | Remove review gate hook | `npx -y claude-consult-mcp setup --remove-review-gate` |
 | Uninstall | `codex mcp remove claude-consult` |
 
