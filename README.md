@@ -10,7 +10,7 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  8 tools, zod-validated, read-only allowlist, injection-hardened argv
+   |  9 tools, zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
 ```
@@ -62,7 +62,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The eight tools
+## The nine tools
 
 | Tool | Use it for | Required args |
 |---|---|---|
@@ -74,10 +74,13 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_debate_reply` | Continue a debate round by accepting or rebutting Claude's rulings with new evidence | `session_id`, `workspace_dir`, `responses` |
 | `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
+| `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |
 
 `claude_continue` also accepts `stance: "critical"` for follow-ups after an adversarial review or debate so Claude keeps its reviewer discipline.
 
-All tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations.
+Claude-calling tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations. `claude_sessions` reads only the in-memory metadata ledger; it never invokes Claude.
+
+Losing a session? Call `claude_sessions` to list recent conversations from this server process, newest first, then pass the recovered `session_id` and same `workspace_dir` to `claude_continue`.
 
 Every successful result ends with a machine-readable footer:
 
@@ -114,6 +117,7 @@ if (format === "json") {
 
 The server ships MCP instructions and trigger-worded tool descriptions so calling agents include Claude in verification workflows without per-user prompt files. Use `claude_second_opinion` for plans or conclusions, `claude_review_files` when Claude should inspect code directly, and `claude_panel` when the user wants multiple perspectives in one call.
 Claude is instructed to cite precise evidence for every claim: file paths with line numbers it actually read, or URLs it actually fetched, and to verify accessible caller claims before relying on them.
+If Claude returns a `Questions for you:` section or a structured `questions_for_caller` array, answer those questions with `claude_continue` so the same conversation can produce a better conclusion.
 For implemented changes, use `claude_review_diff` so Claude reviews the actual git diff instead of only a summary. Clients that support MCP progress see a heartbeat during long calls.
 
 Example Codex prompt: `"Verify this plan with claude_panel using the security and correctness perspectives."`
