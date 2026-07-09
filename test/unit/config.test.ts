@@ -3,6 +3,9 @@ import { CAPABILITY_TOOLS } from "../../src/constants.js";
 import { isClaudeConsultError } from "../../src/errors.js";
 import { loadConfig } from "../../src/config.js";
 
+const ABSOLUTE_JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tmp/journal";
+const UNC_JOURNAL_DIR = process.platform === "win32" ? "\\\\server\\share\\journal" : "//server/share/journal";
+
 function expectInvalidInput(fn: () => unknown, messagePart: string): void {
   try {
     fn();
@@ -27,6 +30,7 @@ describe("loadConfig", () => {
     expect(config.allowedTools).toEqual(CAPABILITY_TOOLS.research);
     expect(config.maxBudgetUsd).toBeUndefined();
     expect(config.maxThinkingTokens).toBeUndefined();
+    expect(config.journalDir).toBeUndefined();
     expect(config.maxConcurrency).toBe(2);
     expect(config.logLevel).toBe("info");
     expect(Object.isFrozen(config)).toBe(true);
@@ -42,6 +46,7 @@ describe("loadConfig", () => {
       CLAUDE_CONSULT_CAPABILITY: "readonly",
       CLAUDE_CONSULT_MAX_BUDGET_USD: "2.5",
       CLAUDE_CONSULT_MAX_THINKING_TOKENS: "10000",
+      CLAUDE_CONSULT_JOURNAL_DIR: ABSOLUTE_JOURNAL_DIR,
       CLAUDE_CONSULT_MAX_CONCURRENCY: "4",
       CLAUDE_CONSULT_LOG_LEVEL: "debug"
     });
@@ -53,6 +58,7 @@ describe("loadConfig", () => {
     expect(config.allowedTools).toEqual(CAPABILITY_TOOLS.readonly);
     expect(config.maxBudgetUsd).toBe(2.5);
     expect(config.maxThinkingTokens).toBe(10_000);
+    expect(config.journalDir).toBe(ABSOLUTE_JOURNAL_DIR);
     expect(config.maxConcurrency).toBe(4);
     expect(config.logLevel).toBe("debug");
   });
@@ -124,6 +130,11 @@ describe("loadConfig", () => {
   it("rejects non-positive or non-integer thinking token caps", () => {
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_THINKING_TOKENS: "0" }), "CLAUDE_CONSULT_MAX_THINKING_TOKENS");
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_MAX_THINKING_TOKENS: "1.5" }), "CLAUDE_CONSULT_MAX_THINKING_TOKENS");
+  });
+
+  it("rejects relative or UNC journal directories", () => {
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_JOURNAL_DIR: "relative\\journal" }), "CLAUDE_CONSULT_JOURNAL_DIR");
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_JOURNAL_DIR: UNC_JOURNAL_DIR }), "CLAUDE_CONSULT_JOURNAL_DIR");
   });
 
   it("rejects unknown log levels and invalid default models", () => {

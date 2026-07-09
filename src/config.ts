@@ -1,3 +1,4 @@
+import path from "node:path";
 import { CAPABILITIES, CAPABILITY_TOOLS, DEFAULTS, ENV, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, type Capability, type LogLevel } from "./constants.js";
 import { ClaudeConsultError } from "./errors.js";
 
@@ -10,6 +11,7 @@ export interface Config {
   readonly allowedTools: readonly string[];
   readonly maxBudgetUsd: number | undefined;
   readonly maxThinkingTokens: number | undefined;
+  readonly journalDir: string | undefined;
   readonly maxConcurrency: number;
   readonly logLevel: LogLevel;
 }
@@ -120,6 +122,17 @@ function parseAllowedTools(env: Env, capability: Capability): readonly string[] 
   return override;
 }
 
+function parseJournalDir(env: Env): string | undefined {
+  const raw = readValue(env, ENV.journalDir);
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (PATTERNS.uncOrDevice.test(raw) || !path.isAbsolute(raw)) {
+    fail(ENV.journalDir, `must be a local absolute path, got "${raw}"`, "set it to a local directory path or unset it to disable journaling");
+  }
+  return raw;
+}
+
 export function loadConfig(env: Env = process.env): Config {
   const capability = parseChoice(env, ENV.capability, CAPABILITIES, DEFAULTS.capability);
   const model = parseModel(env);
@@ -136,6 +149,7 @@ export function loadConfig(env: Env = process.env): Config {
     allowedTools: parseAllowedTools(env, capability),
     maxBudgetUsd: parsePositiveNumber(env, ENV.maxBudgetUsd),
     maxThinkingTokens: parsePositiveInt(env, ENV.maxThinkingTokens),
+    journalDir: parseJournalDir(env),
     maxConcurrency: parseBoundedInt(env, ENV.maxConcurrency, LIMITS.concurrencyMin, LIMITS.concurrencyMax, DEFAULTS.maxConcurrency),
     logLevel: parseChoice(env, ENV.logLevel, LOG_LEVELS, DEFAULTS.logLevel)
   });

@@ -32,6 +32,7 @@ export const ENV = deepFreeze({
   allowedTools: "CLAUDE_CONSULT_ALLOWED_TOOLS",
   maxBudgetUsd: "CLAUDE_CONSULT_MAX_BUDGET_USD",
   maxThinkingTokens: "CLAUDE_CONSULT_MAX_THINKING_TOKENS",
+  journalDir: "CLAUDE_CONSULT_JOURNAL_DIR",
   maxConcurrency: "CLAUDE_CONSULT_MAX_CONCURRENCY",
   logLevel: "CLAUDE_CONSULT_LOG_LEVEL",
   e2e: "CLAUDE_CONSULT_E2E"

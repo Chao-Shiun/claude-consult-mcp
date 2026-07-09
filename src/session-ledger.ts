@@ -19,7 +19,7 @@ export interface SessionLedger {
 
 const EXCERPT_CHARS = 120;
 
-function normalizeExcerpt(excerpt: string): string {
+export function normalizeExcerpt(excerpt: string): string {
   return excerpt.replace(/\s+/g, " ").trim().slice(0, EXCERPT_CHARS);
 }
 
