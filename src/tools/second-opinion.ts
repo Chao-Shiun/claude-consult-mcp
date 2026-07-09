@@ -25,7 +25,8 @@ export const VERDICT_JSON_SCHEMA = JSON.stringify({
     flaws: { type: "array", items: { type: "string" } },
     missed_considerations: { type: "array", items: { type: "string" } },
     suggested_changes: { type: "array", items: { type: "string" } },
-    summary_markdown: { type: "string" }
+    summary_markdown: { type: "string" },
+    questions_for_caller: { type: "array", items: { type: "string" } }
   },
   required: ["verdict", "confidence", "claim_verifications", "flaws", "missed_considerations", "suggested_changes", "summary_markdown"]
 });

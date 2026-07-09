@@ -16,6 +16,9 @@ import { createContinueSessionTool } from "../../src/tools/continue-session.js";
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const STRUCTURED_FORMAT_DESCRIPTION = 'Check the result footer\'s format field before parsing: format: json means the body is the requested JSON document; format: prose means Claude answered in prose instead - read it directly or retry with a stronger model rather than calling JSON.parse blindly.';
 const STRUCTURED_NOTICE = '[claude-consult] structured-output-notice: Claude answered in prose instead of the requested JSON. Read the answer below directly and extract what you need; if you strictly require the JSON fields, retry once with model "sonnet" or "opus", which follow output schemas more reliably.';
+const ADVISOR_QUESTIONS_SENTENCE = "If information critical to a sound answer is missing and you cannot obtain it with your tools, end your answer with a section titled 'Questions for you:' listing the specific questions; the caller can answer them by continuing this conversation.";
+const CONTINUE_QUESTIONS_SENTENCE = "If Claude's answer ends with a 'Questions for you:' section or the JSON contains questions_for_caller, answer those questions with this tool to unblock a better conclusion.";
+const QUESTIONS_FOR_CALLER_SCHEMA = { type: "array", items: { type: "string" } };
 
 // workspace_dir must be absolute on the host platform; CI runs this suite on
 // Windows, macOS, and Linux.
@@ -55,6 +58,7 @@ function expectSuccessResult(result: unknown): void {
 describe("ask_claude tool", () => {
   it("keeps the advisor prompt anchored to precise evidence discipline", () => {
     expect(ADVISOR_SYSTEM_PROMPT).toContain("Every claim you make must cite its evidence precisely: a file path with line numbers you actually read, or a URL you actually fetched. When the caller supplies claims about files or documents you can access, verify them yourself before relying on them, and state what you found. If you change your position, name the specific evidence that persuaded you.");
+    expect(ADVISOR_SYSTEM_PROMPT).toContain(ADVISOR_QUESTIONS_SENTENCE);
   });
 
   it("sends the bare question with the advisor system prompt", async () => {
@@ -119,6 +123,15 @@ describe("claude_second_opinion tool", () => {
     expect(text).toContain(STRUCTURED_NOTICE);
     expect(text).toContain("<prose-answer>\nthe answer\n</prose-answer>");
     expect(text).toContain("format: prose");
+  });
+
+  it("keeps v0.4 required fields while allowing caller questions in the JSON schema", () => {
+    const schema = JSON.parse(VERDICT_JSON_SCHEMA) as {
+      readonly properties: Record<string, unknown>;
+      readonly required: readonly string[];
+    };
+    expect(schema.properties.questions_for_caller).toEqual(QUESTIONS_FOR_CALLER_SCHEMA);
+    expect(schema.required).toEqual(["verdict", "confidence", "claim_verifications", "flaws", "missed_considerations", "suggested_changes", "summary_markdown"]);
   });
 });
 
@@ -206,6 +219,7 @@ describe("claude_continue tool", () => {
     const tool = createContinueSessionTool(context);
     const signal = new AbortController().signal;
     expect(tool.name).toBe("claude_continue");
+    expect(tool.description).toContain(CONTINUE_QUESTIONS_SENTENCE);
     const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR }, { signal });
     expectSuccessResult(result);
     const request = requests[0];

@@ -4,7 +4,7 @@ import { CRITICAL_REVIEWER_PROMPT } from "./second-opinion.js";
 import { commonToolShape, promptTextSchema, sessionIdSchema, toRunnerBase, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { toSuccessResult } from "./tool-result.js";
 
-const DESCRIPTION = "Continue an existing Claude conversation. Pass the session_id printed at the end of a previous result plus your follow-up message. Use the same workspace_dir as the original call, or the session will not be found.";
+const DESCRIPTION = "Continue an existing Claude conversation. Pass the session_id printed at the end of a previous result plus your follow-up message. Use the same workspace_dir as the original call, or the session will not be found. If Claude's answer ends with a 'Questions for you:' section or the JSON contains questions_for_caller, answer those questions with this tool to unblock a better conclusion.";
 
 const argsSchema = z.object({
   session_id: sessionIdSchema,

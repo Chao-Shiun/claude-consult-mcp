@@ -98,6 +98,7 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_panel");
     expect(harness.client.getInstructions()).toContain("stance \"critical\"");
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
+    expect(harness.client.getInstructions()).toContain("When Claude returns questions (a 'Questions for you:' section or questions_for_caller in JSON), answer them via claude_continue instead of abandoning the thread.");
   });
 
   it("lists exactly the nine consult tools with steering schemas", async () => {

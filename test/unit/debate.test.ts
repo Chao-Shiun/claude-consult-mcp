@@ -13,6 +13,7 @@ import type { ToolContext } from "../../src/tools/shared-schemas.js";
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const STRUCTURED_FORMAT_DESCRIPTION = 'Check the result footer\'s format field before parsing: format: json means the body is the requested JSON document; format: prose means Claude answered in prose instead - read it directly or retry with a stronger model rather than calling JSON.parse blindly.';
 const STRUCTURED_NOTICE = '[claude-consult] structured-output-notice: Claude answered in prose instead of the requested JSON. Read the answer below directly and extract what you need; if you strictly require the JSON fields, retry once with model "sonnet" or "opus", which follow output schemas more reliably.';
+const QUESTIONS_FOR_CALLER_SCHEMA = { type: "array", items: { type: "string" } };
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "debate result",
@@ -51,6 +52,15 @@ async function writeFixture(workspace: string, relativePath: string, content: st
 }
 
 describe("claude_debate_open tool", () => {
+  it("keeps v0.4 required fields while allowing caller questions in the JSON schema", () => {
+    const schema = JSON.parse(DEBATE_JSON_SCHEMA) as {
+      readonly properties: Record<string, unknown>;
+      readonly required: readonly string[];
+    };
+    expect(schema.properties.questions_for_caller).toEqual(QUESTIONS_FOR_CALLER_SCHEMA);
+    expect(schema.required).toEqual(["claim_verifications", "counter_claims", "concessions", "remaining_disputes", "verdict", "confidence", "summary_markdown"]);
+  });
+
   it("wraps the opening position, caller evidence, neutral exhibit, referee prompt, and JSON schema", async () => {
     const workspace = await makeWorkspace();
     await writeFixture(workspace, "src/example.ts", Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n"));

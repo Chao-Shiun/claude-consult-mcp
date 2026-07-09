@@ -26,7 +26,8 @@ export const DEBATE_JSON_SCHEMA = JSON.stringify({
     remaining_disputes: { type: "array", items: { type: "string" } },
     verdict: { type: "string", enum: ["agree", "partial", "disagree", "contested"] },
     confidence: { type: "number", minimum: 0, maximum: 1 },
-    summary_markdown: { type: "string" }
+    summary_markdown: { type: "string" },
+    questions_for_caller: { type: "array", items: { type: "string" } }
   },
   required: ["claim_verifications", "counter_claims", "concessions", "remaining_disputes", "verdict", "confidence", "summary_markdown"]
 });
