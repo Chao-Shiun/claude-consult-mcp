@@ -83,7 +83,9 @@ function skipped(deps: ReviewGateDeps, code: string): number {
 }
 
 async function shouldEmitStopHookJson(deps: ReviewGateDeps): Promise<boolean> {
-  if (deps.stdinIsTTY !== false || deps.readStdin === undefined) {
+  // Node reports isTTY as undefined (not false) when stdin is a pipe, which
+  // is exactly the hook-invocation shape; only a real TTY opts out here.
+  if (deps.stdinIsTTY === true || deps.readStdin === undefined) {
     return false;
   }
   try {

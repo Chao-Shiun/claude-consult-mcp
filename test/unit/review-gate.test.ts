@@ -187,6 +187,31 @@ describe("review-gate CLI", () => {
     expect(payload.systemMessage).toBe("claude-consult review-gate:\n- src/a.ts:1 has a bug");
   });
 
+  it("treats an undefined isTTY as a pipe, the shape Node reports for real hook stdin", async () => {
+    const { deps, recorded } = makeDeps({
+      hookStdin: JSON.stringify({ hook_event_name: "Stop" }),
+      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" }
+    });
+    const pipedDeps = { ...deps, stdinIsTTY: undefined };
+
+    await expect(runReviewGate([], pipedDeps)).resolves.toBe(0);
+
+    const payload = JSON.parse(recorded.stdout[0] ?? "{}") as { systemMessage?: string };
+    expect(payload.systemMessage).toContain("claude-consult review-gate:");
+  });
+
+  it("stays in plain-text mode on a real TTY even when stdin could be read", async () => {
+    const { deps, recorded } = makeDeps({
+      hookStdin: JSON.stringify({ hook_event_name: "Stop" }),
+      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" }
+    });
+    const ttyDeps = { ...deps, stdinIsTTY: true };
+
+    await expect(runReviewGate([], ttyDeps)).resolves.toBe(0);
+
+    expect(recorded.stdout[0]).toBe("claude-consult review-gate:\n- src/a.ts:1 has a bug");
+  });
+
   it.each(ERROR_CODES)("fails open for Claude taxonomy error %s", async (code) => {
     const { deps, recorded } = makeDeps({
       runClaudeError: new ClaudeConsultError(code, "taxonomy failure", "test hint")
