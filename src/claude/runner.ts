@@ -2,6 +2,7 @@ import os from "node:os";
 import { CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, LIMITS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
+import { createJournal, type Journal } from "../journal.js";
 import type { Logger } from "../logger.js";
 import { createSemaphore } from "../semaphore.js";
 import { createSessionLedger, type SessionLedger } from "../session-ledger.js";
@@ -29,6 +30,7 @@ export interface Runner {
   readonly run: RunClaude;
   readonly killInFlight: () => number;
   readonly ledger: SessionLedger;
+  readonly journal?: Journal | undefined;
 }
 
 export interface RunnerDeps {
@@ -39,6 +41,7 @@ export interface RunnerDeps {
   readonly baseEnv: Readonly<Record<string, string | undefined>>;
   readonly defaultCwd: string;
   readonly ledger?: SessionLedger | undefined;
+  readonly journal?: Journal | undefined;
 }
 
 function validatePrompt(prompt: string): void {
@@ -84,6 +87,7 @@ export function createRunner(deps: RunnerDeps): Runner {
   const semaphore = createSemaphore(deps.config.maxConcurrency);
   const inFlight = new Set<() => void>();
   const ledger = deps.ledger ?? createSessionLedger();
+  const journal = deps.journal;
 
   const registerChild = (kill: () => void): (() => void) => {
     inFlight.add(kill);
@@ -155,6 +159,18 @@ export function createRunner(deps: RunnerDeps): Runner {
     const envelope = parseClaudeOutput(raw);
     if (request.origin !== undefined) {
       ledger.record({ sessionId: envelope.sessionId, tool: request.origin.tool, workspaceDir: request.cwd, model: request.model, excerpt: request.origin.excerpt });
+      void journal?.append({
+        ts: new Date().toISOString(),
+        sessionId: envelope.sessionId,
+        tool: request.origin.tool,
+        workspaceDir: request.cwd,
+        model: request.model,
+        excerpt: request.origin.excerpt,
+        costUsd: envelope.totalCostUsd,
+        durationMs: envelope.durationMs
+      }).catch((error: unknown) => {
+        deps.logger.error(`failed to append consultation journal: ${error instanceof Error ? error.message : String(error)}`);
+      });
     }
     return envelope;
   };
@@ -167,12 +183,13 @@ export function createRunner(deps: RunnerDeps): Runner {
     return pending.length;
   };
 
-  return Object.freeze({ run, killInFlight, ledger });
+  return Object.freeze({ run, killInFlight, ledger, journal });
 }
 
 export function createDefaultRunner(config: Config, logger: Logger): Runner {
   const locator = createDefaultClaudeLocator(config);
   const ledger = createSessionLedger();
+  const journal = config.journalDir === undefined ? undefined : createJournal(config.journalDir, logger);
   return createRunner({
     config,
     logger,
@@ -180,6 +197,7 @@ export function createDefaultRunner(config: Config, logger: Logger): Runner {
     spawnImpl: (request, onSpawned) => spawnClaude(request, createDefaultSpawnDeps(logger, onSpawned)),
     baseEnv: process.env,
     defaultCwd: os.homedir(),
-    ledger
+    ledger,
+    journal
   });
 }

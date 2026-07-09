@@ -3,14 +3,16 @@ import { loadConfig } from "../../src/config.js";
 import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
 import { createLogger } from "../../src/logger.js";
-import { createRunner, type RunnerDeps } from "../../src/claude/runner.js";
+import { createDefaultRunner, createRunner, type RunnerDeps } from "../../src/claude/runner.js";
 import type { RawRunOutput, } from "../../src/claude/parse-output.js";
 import type { SpawnClaudeRequest } from "../../src/claude/spawn-claude.js";
 import { createSessionLedger } from "../../src/session-ledger.js";
+import type { Journal, JournalEntry } from "../../src/journal.js";
 import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 
 const silentLogger = createLogger("silent", { write: () => true });
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
+const ABSOLUTE_JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tmp/journal";
 
 function successRaw(result = "pong"): RawRunOutput {
   return {
@@ -298,6 +300,67 @@ describe("createRunner", () => {
       lastUsedAt: "2026-01-01T00:00:00.000Z",
       turns: 1
     }]);
+  });
+
+  it("records successful conversations in the journal when configured", async () => {
+    const entries: JournalEntry[] = [];
+    const journal: Journal = {
+      append: async (entry) => {
+        entries.push(entry);
+      },
+      read: async () => []
+    };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+    await runner.run({ prompt: "hi", cwd: "C:\\repo", model: "haiku", origin: { tool: "ask_claude", excerpt: "What changed?" } });
+    await flush();
+
+    expect(entries).toEqual([{
+      ts: expect.any(String) as string,
+      sessionId: SESSION_ID,
+      tool: "ask_claude",
+      workspaceDir: "C:\\repo",
+      model: "haiku",
+      excerpt: "What changed?",
+      costUsd: 0.01,
+      durationMs: 1200
+    }]);
+  });
+
+  it("skips journal writes when unset and when origin is absent", async () => {
+    const entries: JournalEntry[] = [];
+    const journal: Journal = {
+      append: async (entry) => {
+        entries.push(entry);
+      },
+      read: async () => []
+    };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+    await runner.run({ prompt: "doctor probe" });
+    await flush();
+
+    expect(entries).toHaveLength(0);
+    expect(createRunner(harness.deps).journal).toBeUndefined();
+  });
+
+  it("does not fail the run when a journal stub rejects", async () => {
+    const journal: Journal = {
+      append: async () => {
+        throw new Error("disk full");
+      },
+      read: async () => []
+    };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+
+    await expect(runner.run({ prompt: "hi", origin: { tool: "ask_claude", excerpt: "hi" } })).resolves.toMatchObject({ sessionId: SESSION_ID });
+    await flush();
+  });
+
+  it("creates a default journal only when the journal directory is configured", () => {
+    expect(createDefaultRunner(loadConfig({}), silentLogger).journal).toBeUndefined();
+    expect(createDefaultRunner(loadConfig({ CLAUDE_CONSULT_JOURNAL_DIR: ABSOLUTE_JOURNAL_DIR }), silentLogger).journal).toBeDefined();
   });
 
   it("bumps an existing ledger session on resume and skips runs without origin", async () => {

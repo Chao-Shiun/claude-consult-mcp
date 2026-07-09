@@ -21,7 +21,7 @@ async function serverMain(): Promise<number> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
   const runner = createDefaultRunner(config, logger);
-  const server = createServer({ runClaude: runner.run, logger, ledger: runner.ledger });
+  const server = createServer({ runClaude: runner.run, logger, ledger: runner.ledger, journal: runner.journal });
   await runServer({ server, logger, killInFlight: runner.killInFlight });
   return 0;
 }
