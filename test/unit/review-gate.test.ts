@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ClaudeConsultError } from "../../src/errors.js";
+import { ClaudeConsultError, ERROR_CODES } from "../../src/errors.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
 import { runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
@@ -121,6 +121,15 @@ describe("review-gate CLI", () => {
     expect(recorded.stderr).toEqual(["review-gate: diff too large (4 bytes), skipped"]);
   });
 
+  it("fails open for invalid arguments", async () => {
+    const { deps, recorded } = makeDeps();
+
+    await expect(runReviewGate(["--model"], deps)).resolves.toBe(0);
+
+    expect(recorded.requests).toHaveLength(0);
+    expect(recorded.stderr).toEqual(["review-gate: skipped (INVALID_INPUT)"]);
+  });
+
   it("resolves the gate model from flag, env, then haiku", async () => {
     const first = makeDeps({ env: { CLAUDE_CONSULT_GATE_MODEL: "sonnet" } });
     await runReviewGate(["--model", "opus"], first.deps);
@@ -178,13 +187,13 @@ describe("review-gate CLI", () => {
     expect(payload.systemMessage).toBe("claude-consult review-gate:\n- src/a.ts:1 has a bug");
   });
 
-  it("fails open for Claude taxonomy errors", async () => {
+  it.each(ERROR_CODES)("fails open for Claude taxonomy error %s", async (code) => {
     const { deps, recorded } = makeDeps({
-      runClaudeError: new ClaudeConsultError("CLAUDE_NOT_FOUND", "claude missing", "install claude")
+      runClaudeError: new ClaudeConsultError(code, "taxonomy failure", "test hint")
     });
 
     await expect(runReviewGate([], deps)).resolves.toBe(0);
 
-    expect(recorded.stderr).toEqual(["review-gate: skipped (CLAUDE_NOT_FOUND)"]);
+    expect(recorded.stderr).toEqual([`review-gate: skipped (${code})`]);
   });
 });

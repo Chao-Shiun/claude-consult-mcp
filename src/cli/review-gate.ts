@@ -113,8 +113,7 @@ function composePrompt(diff: string, status: string): string {
 export async function runReviewGate(argv: readonly string[], deps: ReviewGateDeps): Promise<number> {
   const parsed = parseArgs(argv);
   if (typeof parsed === "string") {
-    deps.printErr(`review-gate: invalid arguments (${parsed})`);
-    return 1;
+    return skipped(deps, "INVALID_INPUT");
   }
 
   let insideWorkTree: CommandResult;
