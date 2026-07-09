@@ -56,6 +56,7 @@ describe("claude_debate_open tool", () => {
     await writeFixture(workspace, "src/example.ts", Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n"));
     const { requests, context } = makeContext();
     const tool = createDebateOpenTool(context);
+    const signal = new AbortController().signal;
 
     const result = await tool.execute({
       topic: "Should we trust the cache invalidation patch?",
@@ -63,7 +64,7 @@ describe("claude_debate_open tool", () => {
       evidence: [{ claim: "The relevant code is only line 10.", type: "file", ref: "src/example.ts:10-11", content: "caller supplied note" }],
       workspace_dir: workspace,
       model: "haiku"
-    });
+    }, { signal });
 
     const request = requests[0];
     expect(request?.prompt).toContain("A structured evidence debate has been opened. Verify before you judge.");
@@ -84,6 +85,7 @@ describe("claude_debate_open tool", () => {
     expect(request?.addDirs).toEqual([workspace]);
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
+    expect(request?.signal).toBe(signal);
     expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
     const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
     expect(text).toContain(STRUCTURED_NOTICE);
@@ -156,6 +158,7 @@ describe("claude_debate_reply tool", () => {
     await writeFixture(workspace, "reply.txt", "reply evidence\n");
     const { requests, context } = makeContext();
     const tool = createDebateReplyTool(context);
+    const signal = new AbortController().signal;
 
     const result = await tool.execute({
       session_id: SESSION_ID,
@@ -165,12 +168,13 @@ describe("claude_debate_reply tool", () => {
         { item: "counter 2", action: "rebut", argument: "This misses a newer file.", evidence: { claim: "New file refutes it.", type: "file", ref: "reply.txt" } }
       ],
       model: "haiku"
-    });
+    }, { signal });
 
     const request = requests[0];
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
+    expect(request?.signal).toBe(signal);
     expect(request?.prompt).toContain('<round-response item="claim 1" action="accept">');
     expect(request?.prompt).toContain("<argument>\nI accept this because the cited line matches.\n</argument>");
     expect(request?.prompt).toContain('<round-response item="counter 2" action="rebut">');

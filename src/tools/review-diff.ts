@@ -3,7 +3,7 @@ import { LIMITS } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import { runCommand } from "../run-command.js";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { absolutePathSchema, commonToolShape, depthSchema, promptTextSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { absolutePathSchema, commonToolShape, depthSchema, promptTextSchema, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { toSuccessResult, type ToolResult } from "./tool-result.js";
 
 const DESCRIPTION = "Have Claude review your actual code changes: the server runs read-only git in the given repository and gives Claude the diff plus read access to the surrounding files. Pass the repository root as workspace_dir. By default it reviews uncommitted changes against HEAD; pass base (a branch, tag, or commit) to review everything since that ref (base...HEAD). Use it after implementing something to get an independent cross-model review of the change itself. Claude only advises; it never modifies anything. For reviewing files without git context, use claude_review_files.";
@@ -63,7 +63,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       model: commonToolShape.model,
       session_id: commonToolShape.session_id
     },
-    execute: async (rawArgs: Record<string, unknown>) => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const insideWorkTree = await runGit(args.workspace_dir, ["rev-parse", "--is-inside-work-tree"], "repo");
       if (!insideWorkTree.includes("true")) {
@@ -90,7 +90,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         cwd: args.workspace_dir,
         model: args.model,
         sessionId: args.session_id,
-        depth: args.depth
+        depth: args.depth,
+        signal: extra?.signal
       }));
     }
   });

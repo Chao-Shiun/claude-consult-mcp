@@ -2,7 +2,7 @@ import { z } from "zod";
 import { toDisplayText, toInternalError } from "../errors.js";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { analyzePaths, type PathAnalysis } from "./path-analysis.js";
-import { commonToolShape, pathsSchema, promptTextSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, pathsSchema, promptTextSchema, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { formatFooter, type ToolResult } from "./tool-result.js";
 
 export const PANEL_PERSPECTIVES = ["correctness", "security", "performance", "simplicity", "architecture", "testing"] as const;
@@ -65,7 +65,7 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
       workspace_dir: commonToolShape.workspace_dir,
       model: commonToolShape.model
     },
-    execute: async (rawArgs: Record<string, unknown>): Promise<ToolResult> => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra): Promise<ToolResult> => {
       const args = argsSchema.parse(rawArgs);
       const perspectives = args.perspectives ?? DEFAULT_PERSPECTIVES;
       const analysis = args.paths === undefined ? undefined : await analyzePaths(args.paths, args.workspace_dir);
@@ -75,7 +75,8 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
         appendSystemPrompt: composeAdvisorPrompt(LENS_PROMPTS[perspective]),
         addDirs: analysis?.dirs ?? [],
         cwd: analysis?.cwd ?? args.workspace_dir,
-        model: args.model
+        model: args.model,
+        signal: extra?.signal
       })));
       const sections = perspectives.map((perspective, index) => {
         const result = settled[index];

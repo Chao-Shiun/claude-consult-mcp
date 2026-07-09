@@ -211,4 +211,25 @@ describe("MCP protocol layer", () => {
     expect(setIntervalSpy).not.toHaveBeenCalled();
     setIntervalSpy.mockRestore();
   });
+
+  it("propagates client cancellation to the tool runner signal", async () => {
+    let observedSignal: AbortSignal | undefined;
+    harness = await startHarness({ runClaude: async (request: RunnerRequest) => {
+      observedSignal = request.signal;
+      return new Promise<ClaudeEnvelope>((_resolve, reject) => {
+        request.signal?.addEventListener("abort", () => {
+          reject(new ClaudeConsultError("REQUEST_CANCELLED", "the tool call was cancelled by the caller before claude finished", "no action needed; re-issue the call if the cancellation was accidental"));
+        }, { once: true });
+      });
+    } });
+    const controller = new AbortController();
+    const call = harness.client.callTool({ name: "ask_claude", arguments: { question: "cancel this" } }, undefined, { signal: controller.signal });
+    for (let attempt = 0; attempt < 10 && observedSignal === undefined; attempt += 1) {
+      await sleep(0);
+    }
+    expect(observedSignal).toBeDefined();
+    controller.abort();
+    await expect(call.catch((error: unknown) => error)).resolves.toBeDefined();
+    expect(observedSignal?.aborted).toBe(true);
+  });
 });

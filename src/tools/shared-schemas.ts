@@ -47,10 +47,14 @@ export interface ToolContext {
   readonly runClaude: RunClaude;
 }
 
+export interface ToolExecuteExtra {
+  readonly signal?: AbortSignal | undefined;
+}
+
 export interface ConsultTool {
   readonly name: string;
   readonly title: string;
   readonly description: string;
   readonly inputSchema: z.ZodRawShape;
-  readonly execute: (args: Record<string, unknown>) => Promise<ToolResult>;
+  readonly execute: (args: Record<string, unknown>, extra?: ToolExecuteExtra) => Promise<ToolResult>;
 }

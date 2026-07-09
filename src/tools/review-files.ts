@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { commonToolShape, depthSchema, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, depthSchema, pathsSchema, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { analyzePaths } from "./path-analysis.js";
 import { toSuccessResult } from "./tool-result.js";
 
@@ -24,11 +24,11 @@ export function createReviewFilesTool(toolContext: ToolContext): ConsultTool {
       depth: depthSchema,
       ...commonToolShape
     },
-    execute: async (rawArgs: Record<string, unknown>) => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const analysis = await analyzePaths(args.paths, args.workspace_dir);
       const prompt = `Read and analyze the following paths from disk before answering. Use your Read, Glob, and Grep tools within the granted directories.\n\nPaths:\n${analysis.pathList}\n\n<question>\n${args.question}\n</question>`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd, depth: args.depth }));
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd, depth: args.depth, signal: extra?.signal }));
     }
   });
 }

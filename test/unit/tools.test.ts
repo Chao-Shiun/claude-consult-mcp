@@ -60,12 +60,14 @@ describe("ask_claude tool", () => {
   it("sends the bare question with the advisor system prompt", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
+    const signal = new AbortController().signal;
     expect(tool.name).toBe("ask_claude");
-    const result = await tool.execute({ question: "why is the sky blue?" });
+    const result = await tool.execute({ question: "why is the sky blue?" }, { signal });
     expectSuccessResult(result);
     expect(requests[0]?.prompt).toBe("why is the sky blue?");
     expect(requests[0]?.appendSystemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
     expect(requests[0]?.cwd).toBeUndefined();
+    expect(requests[0]?.signal).toBe(signal);
     expect(requests[0]).not.toHaveProperty("jsonSchema");
   });
 
@@ -96,8 +98,9 @@ describe("claude_second_opinion tool", () => {
   it("wraps problem and analysis in review tags with the critical reviewer prompt", async () => {
     const { requests, context } = makeContext();
     const tool = createSecondOpinionTool(context);
+    const signal = new AbortController().signal;
     expect(tool.name).toBe("claude_second_opinion");
-    const result = await tool.execute({ problem: "cache misses", analysis: "we think TTL is wrong" });
+    const result = await tool.execute({ problem: "cache misses", analysis: "we think TTL is wrong" }, { signal });
     expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toContain("<problem>\ncache misses\n</problem>");
@@ -106,6 +109,7 @@ describe("claude_second_opinion tool", () => {
     expect(request?.appendSystemPrompt).toContain("Verdict");
     expect(request?.appendSystemPrompt).toContain("not to be agreeable");
     expect(request?.jsonSchema).toBe(VERDICT_JSON_SCHEMA);
+    expect(request?.signal).toBe(signal);
     expect(tool.description).toContain("When the result footer reports format: json, the result body is a JSON document with fields verdict (agree|partial|disagree), confidence (0-1), claim_verifications (each caller claim labeled verified|refuted|cannot_verify with evidence), flaws, missed_considerations, suggested_changes, and summary_markdown.");
     expect(tool.description).not.toContain("parse it and gate your next action");
     expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
@@ -128,8 +132,9 @@ describe("claude_review_files tool", () => {
 
     const { requests, context } = makeContext();
     const tool = createReviewFilesTool(context);
+    const signal = new AbortController().signal;
     expect(tool.name).toBe("claude_review_files");
-    const result = await tool.execute({ paths: [fileA, subDir, fileB], question: "find the bug" });
+    const result = await tool.execute({ paths: [fileA, subDir, fileB], question: "find the bug" }, { signal });
     expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toContain(fileA);
@@ -138,6 +143,7 @@ describe("claude_review_files tool", () => {
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.addDirs).toEqual([base, subDir]);
     expect(request?.cwd).toBe(base);
+    expect(request?.signal).toBe(signal);
     expect(request).not.toHaveProperty("jsonSchema");
   });
 
@@ -195,13 +201,15 @@ describe("claude_continue tool", () => {
   it("forwards the message and required session id", async () => {
     const { requests, context } = makeContext();
     const tool = createContinueSessionTool(context);
+    const signal = new AbortController().signal;
     expect(tool.name).toBe("claude_continue");
-    const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR });
+    const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR }, { signal });
     expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toBe("and double it");
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.cwd).toBe(WORKSPACE_DIR);
+    expect(request?.signal).toBe(signal);
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.appendSystemPrompt).not.toContain("not to be agreeable");
     expect(request).not.toHaveProperty("jsonSchema");

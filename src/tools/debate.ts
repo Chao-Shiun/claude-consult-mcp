@@ -2,7 +2,7 @@ import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { createExhibitBudget, extractFileExhibit, type NeutralExhibit } from "./exhibits.js";
 import { CRITICAL_REVIEWER_PROMPT } from "./second-opinion.js";
-import { absolutePathSchema, modelSchema, promptTextSchema, sessionIdSchema, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { absolutePathSchema, modelSchema, promptTextSchema, sessionIdSchema, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { STRUCTURED_FORMAT_DESCRIPTION, toSuccessResult } from "./tool-result.js";
 
 const EVIDENCE_TYPES = ["file", "url", "command_output", "reasoning"] as const;
@@ -168,7 +168,7 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
       workspace_dir: absolutePathSchema.describe("Absolute path to the project this debate is about; becomes Claude's working directory."),
       model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default.")
     },
-    execute: async (rawArgs: Record<string, unknown>) => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = openArgsSchema.parse(rawArgs);
       const exhibits = await collectNeutralExhibits(args.workspace_dir, args.evidence.map((evidence, index) => ({ id: String(index + 1), evidence })));
       return toSuccessResult(await toolContext.runClaude({
@@ -177,7 +177,8 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
         jsonSchema: DEBATE_JSON_SCHEMA,
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
-        model: args.model
+        model: args.model,
+        signal: extra?.signal
       }), { structuredExpected: true });
     }
   });
@@ -194,7 +195,7 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
       responses: replyArgsSchema.shape.responses.describe("Accept or rebut Claude's prior claims."),
       model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default.")
     },
-    execute: async (rawArgs: Record<string, unknown>) => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = replyArgsSchema.parse(rawArgs);
       const evidence = args.responses.flatMap((response, index) => response.evidence === undefined ? [] : [{ id: `${index + 1}.1`, evidence: response.evidence }]);
       const exhibits = await collectNeutralExhibits(args.workspace_dir, evidence);
@@ -205,7 +206,8 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
-        sessionId: args.session_id
+        sessionId: args.session_id,
+        signal: extra?.signal
       }), { structuredExpected: true });
     }
   });

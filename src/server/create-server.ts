@@ -63,7 +63,7 @@ export function createServer(deps: ServerDeps): McpServer {
         });
       }, progressHeartbeatMs);
       try {
-        const result = await tool.execute(args);
+        const result = await tool.execute(args, { signal: extra.signal });
         deps.logger.info(`tool ${tool.name} completed`);
         return result;
       } catch (error) {

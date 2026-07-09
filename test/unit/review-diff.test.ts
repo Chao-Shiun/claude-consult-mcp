@@ -80,12 +80,14 @@ describe("claude_review_diff tool", () => {
     await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
     const { requests, context } = makeContext();
     const tool = createReviewDiffTool(context);
+    const signal = new AbortController().signal;
 
-    const result = await tool.execute({ workspace_dir: repo });
+    const result = await tool.execute({ workspace_dir: repo }, { signal });
 
     expect(textOf(result)).toContain("diff review");
     const request = requests[0];
     expect(request?.cwd).toBe(repo);
+    expect(request?.signal).toBe(signal);
     expect(request?.addDirs).toEqual([repo]);
     expect(request?.prompt).toContain("<git-status>");
     expect(request?.prompt).toContain("a.ts");

@@ -185,6 +185,8 @@ Set them at registration time so they live in the Codex config: `npx -y claude-c
 
 ## Troubleshooting
 
+Cancelling a tool call in your client also terminates the underlying claude process; nothing keeps running in the background.
+
 | Symptom | Fix |
 |---|---|
 | `[CLAUDE_NOT_FOUND]` | Install Claude Code (`npm install -g @anthropic-ai/claude-code`) or set `CLAUDE_CONSULT_CLAUDE_BIN` |

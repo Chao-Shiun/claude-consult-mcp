@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
-import { commonToolShape, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext } from "./shared-schemas.js";
+import { commonToolShape, promptTextSchema, toRunnerBase, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { STRUCTURED_FORMAT_DESCRIPTION, toSuccessResult } from "./tool-result.js";
 
 export const CRITICAL_REVIEWER_PROMPT = [
@@ -48,10 +48,10 @@ export function createSecondOpinionTool(toolContext: ToolContext): ConsultTool {
       analysis: promptTextSchema.describe("Your analysis, conclusion, or plan to be critiqued - include the reasoning, not just the answer."),
       ...commonToolShape
     },
-    execute: async (rawArgs: Record<string, unknown>) => {
+    execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const prompt = `Another AI coding agent (OpenAI Codex) asks for an adversarial second opinion.\n\n<problem>\n${args.problem}\n</problem>\n\n<analysis-under-review>\n${args.analysis}\n</analysis-under-review>\n\nCritique the analysis as instructed in your system prompt.`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args) }), { structuredExpected: true });
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args), signal: extra?.signal }), { structuredExpected: true });
     }
   });
 }

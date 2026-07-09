@@ -52,7 +52,8 @@ describe("claude_panel tool", () => {
   it("runs the default perspectives with advisor prompts and fresh sessions", async () => {
     const { requests, context } = makeContext();
     const tool = createPanelTool(context);
-    const result = await tool.execute({ task: "review this design" });
+    const signal = new AbortController().signal;
+    const result = await tool.execute({ task: "review this design" }, { signal });
     expect(textOf(result)).toContain("# Claude panel: 3 perspective(s)");
     expect(requests).toHaveLength(3);
     expect(requests.map((request) => request.appendSystemPrompt)).toEqual([
@@ -62,6 +63,7 @@ describe("claude_panel tool", () => {
     ]);
     for (const request of requests) {
       expect(request.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
+      expect(request.signal).toBe(signal);
       expect(request.prompt).toBe(requests[0]?.prompt);
       expect(request).not.toHaveProperty("sessionId");
       expect(request).not.toHaveProperty("jsonSchema");
