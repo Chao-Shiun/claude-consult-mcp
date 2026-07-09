@@ -64,6 +64,7 @@ describe("claude_panel tool", () => {
     for (const request of requests) {
       expect(request.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
       expect(request.signal).toBe(signal);
+      expect(request.origin).toEqual({ tool: "claude_panel", excerpt: "review this design" });
       expect(request.prompt).toBe(requests[0]?.prompt);
       expect(request).not.toHaveProperty("sessionId");
       expect(request).not.toHaveProperty("jsonSchema");

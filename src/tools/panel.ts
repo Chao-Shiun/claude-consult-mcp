@@ -76,7 +76,8 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
         addDirs: analysis?.dirs ?? [],
         cwd: analysis?.cwd ?? args.workspace_dir,
         model: args.model,
-        signal: extra?.signal
+        signal: extra?.signal,
+        origin: { tool: "claude_panel", excerpt: args.task }
       })));
       const sections = perspectives.map((perspective, index) => {
         const result = settled[index];

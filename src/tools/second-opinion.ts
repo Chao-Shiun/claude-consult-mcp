@@ -51,7 +51,7 @@ export function createSecondOpinionTool(toolContext: ToolContext): ConsultTool {
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const prompt = `Another AI coding agent (OpenAI Codex) asks for an adversarial second opinion.\n\n<problem>\n${args.problem}\n</problem>\n\n<analysis-under-review>\n${args.analysis}\n</analysis-under-review>\n\nCritique the analysis as instructed in your system prompt.`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args), signal: extra?.signal }), { structuredExpected: true });
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT), jsonSchema: VERDICT_JSON_SCHEMA, addDirs: [], ...toRunnerBase(args), signal: extra?.signal, origin: { tool: "claude_second_opinion", excerpt: args.problem } }), { structuredExpected: true });
     }
   });
 }

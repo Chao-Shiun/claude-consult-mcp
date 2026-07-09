@@ -29,7 +29,7 @@ export function createContinueSessionTool(toolContext: ToolContext): ConsultTool
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const appendSystemPrompt = args.stance === "critical" ? composeAdvisorPrompt(CRITICAL_REVIEWER_PROMPT) : composeAdvisorPrompt();
-      return toSuccessResult(await toolContext.runClaude({ prompt: args.message, appendSystemPrompt, addDirs: [], ...toRunnerBase({ ...args, session_id: args.session_id }), signal: extra?.signal }));
+      return toSuccessResult(await toolContext.runClaude({ prompt: args.message, appendSystemPrompt, addDirs: [], ...toRunnerBase({ ...args, session_id: args.session_id }), signal: extra?.signal, origin: { tool: "claude_continue", excerpt: args.message } }));
     }
   });
 }

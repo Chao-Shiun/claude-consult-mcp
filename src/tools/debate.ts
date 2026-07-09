@@ -178,7 +178,8 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
-        signal: extra?.signal
+        signal: extra?.signal,
+        origin: { tool: "claude_debate_open", excerpt: args.topic }
       }), { structuredExpected: true });
     }
   });
@@ -207,7 +208,8 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
         cwd: args.workspace_dir,
         model: args.model,
         sessionId: args.session_id,
-        signal: extra?.signal
+        signal: extra?.signal,
+        origin: { tool: "claude_debate_reply", excerpt: args.responses[0]?.argument ?? "" }
       }), { structuredExpected: true });
     }
   });

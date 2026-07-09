@@ -4,6 +4,7 @@ import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 import type { Logger } from "../logger.js";
 import { createSemaphore } from "../semaphore.js";
+import { createSessionLedger, type SessionLedger } from "../session-ledger.js";
 import { buildClaudeArgs, resolveRunPolicy } from "./build-args.js";
 import { createDefaultClaudeLocator } from "./locate.js";
 import { parseClaudeOutput, type ClaudeEnvelope, type RawRunOutput } from "./parse-output.js";
@@ -19,6 +20,7 @@ export interface RunnerRequest {
   readonly cwd?: string | undefined;
   readonly depth?: "standard" | "deep" | undefined;
   readonly signal?: AbortSignal | undefined;
+  readonly origin?: { readonly tool: string; readonly excerpt: string } | undefined;
 }
 
 export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
@@ -26,6 +28,7 @@ export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
 export interface Runner {
   readonly run: RunClaude;
   readonly killInFlight: () => number;
+  readonly ledger: SessionLedger;
 }
 
 export interface RunnerDeps {
@@ -35,6 +38,7 @@ export interface RunnerDeps {
   readonly spawnImpl: (request: SpawnClaudeRequest, onSpawned: (kill: () => void) => () => void) => Promise<RawRunOutput>;
   readonly baseEnv: Readonly<Record<string, string | undefined>>;
   readonly defaultCwd: string;
+  readonly ledger?: SessionLedger | undefined;
 }
 
 function validatePrompt(prompt: string): void {
@@ -79,6 +83,7 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
 export function createRunner(deps: RunnerDeps): Runner {
   const semaphore = createSemaphore(deps.config.maxConcurrency);
   const inFlight = new Set<() => void>();
+  const ledger = deps.ledger ?? createSessionLedger();
 
   const registerChild = (kill: () => void): (() => void) => {
     inFlight.add(kill);
@@ -147,7 +152,11 @@ export function createRunner(deps: RunnerDeps): Runner {
         removeAbortListener();
       }
     });
-    return parseClaudeOutput(raw);
+    const envelope = parseClaudeOutput(raw);
+    if (request.origin !== undefined) {
+      ledger.record({ sessionId: envelope.sessionId, tool: request.origin.tool, workspaceDir: request.cwd, model: request.model, excerpt: request.origin.excerpt });
+    }
+    return envelope;
   };
 
   const killInFlight = (): number => {
@@ -158,17 +167,19 @@ export function createRunner(deps: RunnerDeps): Runner {
     return pending.length;
   };
 
-  return Object.freeze({ run, killInFlight });
+  return Object.freeze({ run, killInFlight, ledger });
 }
 
 export function createDefaultRunner(config: Config, logger: Logger): Runner {
   const locator = createDefaultClaudeLocator(config);
+  const ledger = createSessionLedger();
   return createRunner({
     config,
     logger,
     locate: locator.locate,
     spawnImpl: (request, onSpawned) => spawnClaude(request, createDefaultSpawnDeps(logger, onSpawned)),
     baseEnv: process.env,
-    defaultCwd: os.homedir()
+    defaultCwd: os.homedir(),
+    ledger
   });
 }

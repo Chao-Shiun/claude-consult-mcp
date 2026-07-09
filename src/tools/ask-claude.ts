@@ -24,7 +24,7 @@ export function createAskClaudeTool(toolContext: ToolContext): ConsultTool {
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
       const prompt = args.context === undefined ? args.question : `<background-context>\n${args.context}\n</background-context>\n\n${args.question}`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: [], ...toRunnerBase(args), signal: extra?.signal }));
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: [], ...toRunnerBase(args), signal: extra?.signal, origin: { tool: "ask_claude", excerpt: args.question } }));
     }
   });
 }

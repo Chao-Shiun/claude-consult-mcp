@@ -86,6 +86,7 @@ describe("claude_debate_open tool", () => {
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
     expect(request?.signal).toBe(signal);
+    expect(request?.origin).toEqual({ tool: "claude_debate_open", excerpt: "Should we trust the cache invalidation patch?" });
     expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
     const text = (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
     expect(text).toContain(STRUCTURED_NOTICE);
@@ -175,6 +176,7 @@ describe("claude_debate_reply tool", () => {
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
     expect(request?.signal).toBe(signal);
+    expect(request?.origin).toEqual({ tool: "claude_debate_reply", excerpt: "I accept this because the cited line matches." });
     expect(request?.prompt).toContain('<round-response item="claim 1" action="accept">');
     expect(request?.prompt).toContain("<argument>\nI accept this because the cited line matches.\n</argument>");
     expect(request?.prompt).toContain('<round-response item="counter 2" action="rebut">');

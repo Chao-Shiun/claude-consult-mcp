@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SERVER_NAME, VERSION } from "../constants.js";
 import type { Logger } from "../logger.js";
 import type { RunClaude } from "../claude/runner.js";
+import type { SessionLedger } from "../session-ledger.js";
 import { createAskClaudeTool } from "../tools/ask-claude.js";
 import { createContinueSessionTool } from "../tools/continue-session.js";
 import { createDebateOpenTool, createDebateReplyTool } from "../tools/debate.js";
@@ -16,6 +17,7 @@ export interface ServerDeps {
   readonly runClaude: RunClaude;
   readonly logger: Logger;
   readonly progressHeartbeatMs?: number;
+  readonly ledger?: SessionLedger | undefined;
 }
 
 export const SERVER_INSTRUCTIONS = [

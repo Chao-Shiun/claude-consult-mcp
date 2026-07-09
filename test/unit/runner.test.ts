@@ -6,6 +6,7 @@ import { createLogger } from "../../src/logger.js";
 import { createRunner, type RunnerDeps } from "../../src/claude/runner.js";
 import type { RawRunOutput, } from "../../src/claude/parse-output.js";
 import type { SpawnClaudeRequest } from "../../src/claude/spawn-claude.js";
+import { createSessionLedger } from "../../src/session-ledger.js";
 import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 
 const silentLogger = createLogger("silent", { write: () => true });
@@ -279,5 +280,46 @@ describe("createRunner", () => {
     const harness = makeHarness({}, async () => authRaw);
     const runner = createRunner(harness.deps);
     await expectCode(runner.run({ prompt: "hi" }), "CLAUDE_NOT_AUTHENTICATED");
+  });
+
+  it("records successful conversations in the session ledger when origin is present", async () => {
+    const ledger = createSessionLedger(50, () => new Date("2026-01-01T00:00:00.000Z"));
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, ledger });
+    await runner.run({ prompt: "hi", cwd: "C:\\repo", model: "haiku", origin: { tool: "ask_claude", excerpt: "What changed?" } });
+
+    expect(ledger.list()).toEqual([{
+      sessionId: SESSION_ID,
+      tool: "ask_claude",
+      workspaceDir: "C:\\repo",
+      model: "haiku",
+      excerpt: "What changed?",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastUsedAt: "2026-01-01T00:00:00.000Z",
+      turns: 1
+    }]);
+  });
+
+  it("bumps an existing ledger session on resume and skips runs without origin", async () => {
+    let ticks = 0;
+    const dates = [new Date("2026-01-01T00:00:00.000Z"), new Date("2026-01-01T00:01:00.000Z")];
+    const fallback = dates[dates.length - 1] ?? new Date("2026-01-01T00:01:00.000Z");
+    const ledger = createSessionLedger(50, () => dates[Math.min(ticks++, dates.length - 1)] ?? fallback);
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, ledger });
+    await runner.run({ prompt: "first", origin: { tool: "ask_claude", excerpt: "first topic" } });
+    await runner.run({ prompt: "second", sessionId: SESSION_ID, origin: { tool: "claude_continue", excerpt: "second topic" } });
+    await runner.run({ prompt: "doctor probe" });
+
+    const [entry] = ledger.list();
+    expect(entry).toMatchObject({
+      sessionId: SESSION_ID,
+      tool: "ask_claude",
+      excerpt: "first topic",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastUsedAt: "2026-01-01T00:01:00.000Z",
+      turns: 2
+    });
+    expect(ledger.list()).toHaveLength(1);
   });
 });

@@ -28,7 +28,7 @@ export function createReviewFilesTool(toolContext: ToolContext): ConsultTool {
       const args = argsSchema.parse(rawArgs);
       const analysis = await analyzePaths(args.paths, args.workspace_dir);
       const prompt = `Read and analyze the following paths from disk before answering. Use your Read, Glob, and Grep tools within the granted directories.\n\nPaths:\n${analysis.pathList}\n\n<question>\n${args.question}\n</question>`;
-      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd, depth: args.depth, signal: extra?.signal }));
+      return toSuccessResult(await toolContext.runClaude({ prompt, appendSystemPrompt: composeAdvisorPrompt(), addDirs: analysis.dirs, ...toRunnerBase(args), cwd: analysis.cwd, depth: args.depth, signal: extra?.signal, origin: { tool: "claude_review_files", excerpt: args.question } }));
     }
   });
 }

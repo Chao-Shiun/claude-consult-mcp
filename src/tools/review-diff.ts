@@ -91,7 +91,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         model: args.model,
         sessionId: args.session_id,
         depth: args.depth,
-        signal: extra?.signal
+        signal: extra?.signal,
+        origin: { tool: "claude_review_diff", excerpt: args.question ?? "diff review" }
       }));
     }
   });

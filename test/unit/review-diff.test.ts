@@ -88,6 +88,7 @@ describe("claude_review_diff tool", () => {
     const request = requests[0];
     expect(request?.cwd).toBe(repo);
     expect(request?.signal).toBe(signal);
+    expect(request?.origin).toEqual({ tool: "claude_review_diff", excerpt: "diff review" });
     expect(request?.addDirs).toEqual([repo]);
     expect(request?.prompt).toContain("<git-status>");
     expect(request?.prompt).toContain("a.ts");
@@ -169,6 +170,7 @@ describe("claude_review_diff tool", () => {
 
     expect(requests[0]?.prompt).toContain("<question>\nFocus on API compatibility.\n</question>");
     expect(requests[0]?.depth).toBe("deep");
+    expect(requests[0]?.origin).toEqual({ tool: "claude_review_diff", excerpt: "Focus on API compatibility." });
   });
 
   it("does not execute configured external diff commands", async () => {
