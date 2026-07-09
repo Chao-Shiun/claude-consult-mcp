@@ -49,13 +49,17 @@ describe("claude_sessions tool", () => {
   });
 
   it("honors workspace filtering and limit", async () => {
+    // The filter argument passes through absolutePathSchema, so the fixture
+    // must be absolute on the host platform (CI runs on all three OSes).
+    const repoA = process.platform === "win32" ? "C:\\repo-a" : "/repo-a";
+    const repoB = process.platform === "win32" ? "C:\\repo-b" : "/repo-b";
     const ledger = ledgerWithClock();
-    ledger.record({ sessionId: SESSION_A, tool: "ask_claude", workspaceDir: "C:\\repo-a", model: undefined, excerpt: "a" });
-    ledger.record({ sessionId: SESSION_B, tool: "ask_claude", workspaceDir: "C:\\repo-b", model: undefined, excerpt: "b" });
-    ledger.record({ sessionId: SESSION_C, tool: "ask_claude", workspaceDir: "C:\\repo-a", model: undefined, excerpt: "c" });
+    ledger.record({ sessionId: SESSION_A, tool: "ask_claude", workspaceDir: repoA, model: undefined, excerpt: "a" });
+    ledger.record({ sessionId: SESSION_B, tool: "ask_claude", workspaceDir: repoB, model: undefined, excerpt: "b" });
+    ledger.record({ sessionId: SESSION_C, tool: "ask_claude", workspaceDir: repoA, model: undefined, excerpt: "c" });
     const tool = createSessionsTool(ledger);
 
-    const text = textOf(await tool.execute({ workspace_dir: "C:\\repo-a", limit: 1 }));
+    const text = textOf(await tool.execute({ workspace_dir: repoA, limit: 1 }));
     expect(text).toContain(`session_id: ${SESSION_C}`);
     expect(text).not.toContain(SESSION_A);
     expect(text).not.toContain(SESSION_B);
