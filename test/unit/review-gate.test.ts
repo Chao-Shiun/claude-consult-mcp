@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { ClaudeConsultError, ERROR_CODES } from "../../src/errors.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
-import { runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
+import { resolveGateLogPath, runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
 
 const CWD = process.platform === "win32" ? "C:\\repo-a" : "/repo-a";
+const GATE_LOG = process.platform === "win32" ? "C:\\logs\\review-gate.log" : "/logs/review-gate.log";
+const JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/journal";
+const RELATIVE_LOG = process.platform === "win32" ? "logs\\review-gate.log" : "logs/review-gate.log";
+const UNC_LOG = process.platform === "win32" ? "\\\\server\\share\\review-gate.log" : "//server/share/review-gate.log";
 const ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "LGTM",
   structuredOutput: undefined,
@@ -21,6 +25,7 @@ interface Recorded {
   readonly commands: Array<{ readonly command: string; readonly args: readonly string[]; readonly cwd?: string | undefined }>;
   readonly createdModels: string[];
   readonly requests: RunnerRequest[];
+  readonly findings: string[];
   readonly stdout: string[];
   readonly stderr: string[];
 }
@@ -32,18 +37,23 @@ interface DepsOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly result?: ClaudeEnvelope;
   readonly runClaudeError?: unknown;
-  readonly hookStdin?: string | undefined;
+  readonly appendFindingsError?: unknown;
 }
 
 function makeDeps(options: DepsOptions = {}): { readonly deps: ReviewGateDeps; readonly recorded: Recorded } {
-  const recorded: Recorded = { commands: [], createdModels: [], requests: [], stdout: [], stderr: [] };
+  const recorded: Recorded = { commands: [], createdModels: [], requests: [], findings: [], stdout: [], stderr: [] };
   return {
     recorded,
     deps: {
       cwd: CWD,
       env: options.env ?? {},
-      stdinIsTTY: options.hookStdin === undefined,
-      readStdin: async () => options.hookStdin ?? "",
+      now: () => new Date("2026-07-09T03:20:11.000Z"),
+      appendFindings: async (record) => {
+        if (options.appendFindingsError !== undefined) {
+          throw options.appendFindingsError;
+        }
+        recorded.findings.push(record);
+      },
       runCommand: async (command, args, runOptions) => {
         recorded.commands.push({ command, args, cwd: runOptions?.cwd });
         if (args[0] === "rev-parse") {
@@ -175,41 +185,53 @@ describe("review-gate CLI", () => {
     expect(recorded.stdout).toEqual(["claude-consult review-gate:\n- src/a.ts:1 has a bug"]);
   });
 
-  it("prints valid Stop-hook JSON when invoked by a Codex stop hook", async () => {
+  it("prints problem output in quiet mode", async () => {
+    const { deps, recorded } = makeDeps({ result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" } });
+
+    await expect(runReviewGate(["--quiet"], deps)).resolves.toBe(0);
+
+    expect(recorded.stdout).toEqual(["claude-consult review-gate:\n- src/a.ts:1 has a bug"]);
+  });
+
+  it("appends durable findings with timestamp, model, session id, and answer", async () => {
+    const { deps, recorded } = makeDeps({ result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" } });
+
+    await expect(runReviewGate([], deps)).resolves.toBe(0);
+
+    expect(recorded.findings).toEqual([`## 2026-07-09T03:20:11.000Z | model: haiku | session_id: ${ENVELOPE.sessionId}
+- src/a.ts:1 has a bug
+
+`]);
+  });
+
+  it("fails open when appending durable findings fails", async () => {
     const { deps, recorded } = makeDeps({
-      hookStdin: JSON.stringify({ hook_event_name: "Stop" }),
-      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" }
+      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" },
+      appendFindingsError: new Error("disk full")
     });
 
     await expect(runReviewGate([], deps)).resolves.toBe(0);
 
-    const payload = JSON.parse(recorded.stdout[0] ?? "{}") as { systemMessage?: string };
-    expect(payload.systemMessage).toBe("claude-consult review-gate:\n- src/a.ts:1 has a bug");
+    expect(recorded.stdout).toEqual(["claude-consult review-gate:\n- src/a.ts:1 has a bug"]);
+    expect(recorded.stderr).toEqual(["review-gate: findings log unavailable"]);
   });
 
-  it("treats an undefined isTTY as a pipe, the shape Node reports for real hook stdin", async () => {
-    const { deps, recorded } = makeDeps({
-      hookStdin: JSON.stringify({ hook_event_name: "Stop" }),
-      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" }
-    });
-    const pipedDeps = { ...deps, stdinIsTTY: undefined };
-
-    await expect(runReviewGate([], pipedDeps)).resolves.toBe(0);
-
-    const payload = JSON.parse(recorded.stdout[0] ?? "{}") as { systemMessage?: string };
-    expect(payload.systemMessage).toContain("claude-consult review-gate:");
+  it("resolves the findings log path from gate log, journal dir, or no log", () => {
+    const stderr: string[] = [];
+    expect(resolveGateLogPath({ CLAUDE_CONSULT_GATE_LOG: GATE_LOG }, (line) => stderr.push(line))).toBe(GATE_LOG);
+    expect(resolveGateLogPath({ CLAUDE_CONSULT_JOURNAL_DIR: JOURNAL_DIR }, (line) => stderr.push(line))).toBe(`${JOURNAL_DIR}${process.platform === "win32" ? "\\" : "/"}review-gate.log`);
+    expect(resolveGateLogPath({}, (line) => stderr.push(line))).toBeUndefined();
+    expect(stderr).toEqual([]);
   });
 
-  it("stays in plain-text mode on a real TTY even when stdin could be read", async () => {
-    const { deps, recorded } = makeDeps({
-      hookStdin: JSON.stringify({ hook_event_name: "Stop" }),
-      result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" }
-    });
-    const ttyDeps = { ...deps, stdinIsTTY: true };
-
-    await expect(runReviewGate([], ttyDeps)).resolves.toBe(0);
-
-    expect(recorded.stdout[0]).toBe("claude-consult review-gate:\n- src/a.ts:1 has a bug");
+  it("disables the findings log for invalid paths", () => {
+    const stderr: string[] = [];
+    expect(resolveGateLogPath({ CLAUDE_CONSULT_GATE_LOG: RELATIVE_LOG }, (line) => stderr.push(line))).toBeUndefined();
+    expect(resolveGateLogPath({ CLAUDE_CONSULT_JOURNAL_DIR: UNC_LOG }, (line) => stderr.push(line))).toBeUndefined();
+    expect(stderr).toEqual([
+      "review-gate: findings log disabled (invalid CLAUDE_CONSULT_GATE_LOG)",
+      "review-gate: findings log disabled (invalid CLAUDE_CONSULT_JOURNAL_DIR)"
+    ]);
   });
 
   it.each(ERROR_CODES)("fails open for Claude taxonomy error %s", async (code) => {

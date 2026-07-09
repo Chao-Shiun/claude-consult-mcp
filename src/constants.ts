@@ -33,6 +33,7 @@ export const ENV = deepFreeze({
   maxBudgetUsd: "CLAUDE_CONSULT_MAX_BUDGET_USD",
   maxThinkingTokens: "CLAUDE_CONSULT_MAX_THINKING_TOKENS",
   journalDir: "CLAUDE_CONSULT_JOURNAL_DIR",
+  gateLog: "CLAUDE_CONSULT_GATE_LOG",
   gateModel: "CLAUDE_CONSULT_GATE_MODEL",
   maxConcurrency: "CLAUDE_CONSULT_MAX_CONCURRENCY",
   logLevel: "CLAUDE_CONSULT_LOG_LEVEL",

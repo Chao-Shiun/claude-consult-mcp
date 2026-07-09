@@ -1,3 +1,5 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { ENV, LIMITS, PATTERNS } from "../constants.js";
 import { loadConfig } from "../config.js";
 import { isClaudeConsultError } from "../errors.js";
@@ -15,8 +17,8 @@ export interface ReviewGateDeps {
   readonly createRunner: (model: string) => RunClaude;
   readonly print: (line: string) => void;
   readonly printErr: (line: string) => void;
-  readonly stdinIsTTY?: boolean | undefined;
-  readonly readStdin?: (() => Promise<string>) | undefined;
+  readonly appendFindings?: ((record: string) => Promise<void>) | undefined;
+  readonly now?: (() => Date) | undefined;
 }
 
 interface ReviewGateOptions {
@@ -82,30 +84,28 @@ function skipped(deps: ReviewGateDeps, code: string): number {
   return 0;
 }
 
-async function shouldEmitStopHookJson(deps: ReviewGateDeps): Promise<boolean> {
-  // Node reports isTTY as undefined (not false) when stdin is a pipe, which
-  // is exactly the hook-invocation shape; only a real TTY opts out here.
-  if (deps.stdinIsTTY === true || deps.readStdin === undefined) {
-    return false;
-  }
-  try {
-    const raw = await deps.readStdin();
-    if (raw.trim() === "") {
-      return false;
-    }
-    const parsed = JSON.parse(raw) as { readonly hook_event_name?: unknown };
-    return parsed.hook_event_name === "Stop";
-  } catch {
-    return false;
-  }
+function validLocalAbsolute(value: string): boolean {
+  return path.isAbsolute(value) && !PATTERNS.uncOrDevice.test(value);
 }
 
-async function printReview(deps: ReviewGateDeps, text: string): Promise<void> {
-  if (await shouldEmitStopHookJson(deps)) {
-    deps.print(JSON.stringify({ systemMessage: text }));
-    return;
+export function resolveGateLogPath(env: Readonly<Record<string, string | undefined>>, printErr: (line: string) => void): string | undefined {
+  const gateLog = readEnv(env, ENV.gateLog);
+  if (gateLog !== undefined) {
+    if (!validLocalAbsolute(gateLog)) {
+      printErr(`review-gate: findings log disabled (invalid ${ENV.gateLog})`);
+      return undefined;
+    }
+    return gateLog;
   }
-  deps.print(text);
+  const journalDir = readEnv(env, ENV.journalDir);
+  if (journalDir !== undefined) {
+    if (!validLocalAbsolute(journalDir)) {
+      printErr(`review-gate: findings log disabled (invalid ${ENV.journalDir})`);
+      return undefined;
+    }
+    return path.join(journalDir, "review-gate.log");
+  }
+  return undefined;
 }
 
 function composePrompt(diff: string, status: string): string {
@@ -161,42 +161,46 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
       origin: { tool: "review-gate", excerpt: "automatic post-turn diff review" }
     });
     const answer = envelope.result.trim();
+    if (deps.appendFindings !== undefined) {
+      try {
+        await deps.appendFindings(`## ${(deps.now ?? (() => new Date()))().toISOString()} | model: ${model} | session_id: ${envelope.sessionId}\n${answer}\n\n`);
+      } catch {
+        deps.printErr("review-gate: findings log unavailable");
+      }
+    }
     if (parsed.quiet && answer === "LGTM") {
       return 0;
     }
-    await printReview(deps, `claude-consult review-gate:\n${answer}`);
+    deps.print(`claude-consult review-gate:\n${answer}`);
     return 0;
   } catch (error) {
     return skipped(deps, isClaudeConsultError(error) ? error.code : "INTERNAL_ERROR");
   }
 }
 
-function readProcessStdin(): Promise<string> {
-  return new Promise((resolve) => {
-    let input = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk: string) => {
-      input = `${input}${chunk}`;
-    });
-    process.stdin.on("end", () => resolve(input));
-    process.stdin.on("error", () => resolve(""));
-    process.stdin.resume();
-  });
-}
-
 export function createDefaultReviewGateDeps(print: (line: string) => void, printErr: (line: string) => void): ReviewGateDeps {
+  const gateLogPath = resolveGateLogPath(process.env, printErr);
+  const appendFindings = gateLogPath === undefined
+    ? undefined
+    : async (record: string): Promise<void> => {
+      await mkdir(path.dirname(gateLogPath), { recursive: true });
+      await appendFile(gateLogPath, record, "utf8");
+    };
+  const journalDir = readEnv(process.env, ENV.journalDir);
+  const runnerEnv = journalDir !== undefined && !validLocalAbsolute(journalDir)
+    ? { ...process.env, [ENV.journalDir]: undefined }
+    : process.env;
   return Object.freeze({
     cwd: process.cwd(),
     env: process.env,
     runCommand,
     createRunner: (model: string) => {
-      const config = loadConfig({ ...process.env, [ENV.model]: model });
+      const config = loadConfig({ ...runnerEnv, [ENV.model]: model });
       const logger = createLogger(config.logLevel);
       return createDefaultRunner(config, logger).run;
     },
     print,
     printErr,
-    stdinIsTTY: process.stdin.isTTY,
-    readStdin: readProcessStdin
+    appendFindings
   });
 }
