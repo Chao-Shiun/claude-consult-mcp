@@ -125,7 +125,7 @@ Debate tools are deliberately slow and expensive compared with `ask_claude`; use
 
 `claude_review_files` and `claude_review_diff` accept `depth: "deep"` when the machine owner has set `CLAUDE_CONSULT_CAPABILITY=deep-research`. Deep mode allows Claude to delegate read-only exploration to sub-agents for large scopes, then synthesize the result itself. It is slower and can use several times the turns of a standard review, so reserve it for broad audits, large directories, and risky changes.
 
-Safety probe statement: before enabling this release, the `Task` sub-agent token was verified with a real haiku probe on Claude Code CLI `2.1.163`; a sub-agent write attempt could not create `probe.txt` and was blocked by the default permission flow. If your local Claude Code behavior differs, keep `CLAUDE_CONSULT_CAPABILITY` at the default `research`.
+Safety probe statement: before enabling this release, the `Agent` sub-agent token was verified with real haiku probes on Claude Code CLI `2.1.163` (2026-07-09). Under the previously assumed `Task` token no sub-agent tool exists at all; under `Agent` a sub-agent spawned, and every write attempt it made (Write, Bash, PowerShell) was denied by the default permission flow - `probe.txt` was never created. If your local Claude Code behavior differs, keep `CLAUDE_CONSULT_CAPABILITY` at the default `research`.
 
 ## Model and capability policy
 
@@ -139,7 +139,7 @@ The machine owner sets policy ceilings via environment variables; Codex chooses 
 | Codex (within the whitelist) | Per-call model | `model` tool argument |
 | Owner only | Optional budget cap | `CLAUDE_CONSULT_MAX_BUDGET_USD` |
 
-There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Task` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
+There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Agent` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
 
 No budget cap is set by default because this package assumes a Claude subscription login with no marginal cost per run. Machines billed through an API key can opt into a spending guard by setting `CLAUDE_CONSULT_MAX_BUDGET_USD` or running `setup --max-budget-usd <n>`.
 
@@ -163,7 +163,7 @@ Set them at registration time so they live in the Codex config: `npx -y claude-c
 ## Security notes
 
 - Read-only by design: no write-capable tool can ever reach the child process; permission mode is never bypassed.
-- The `deep-research` tier adds only the verified `Task` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
+- The `deep-research` tier adds only the verified `Agent` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
 - The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
 - No credentials are stored, read, or transmitted by this package; the claude CLI uses its own login on each machine.

@@ -50,7 +50,7 @@ describe("constants", () => {
 
   it("defines exactly three capability tiers without any write-capable tool", () => {
     expect(CAPABILITIES).toEqual(["readonly", "research", "deep-research"]);
-    expect(SUBAGENT_TOOL_TOKEN).toBe("Task");
+    expect(SUBAGENT_TOOL_TOKEN).toBe("Agent");
     expect(CAPABILITY_TOOLS.readonly).toEqual(["Read", "Glob", "Grep"]);
     expect(CAPABILITY_TOOLS.research).toEqual(["Read", "Glob", "Grep", "WebSearch", "WebFetch"]);
     expect(CAPABILITY_TOOLS["deep-research"]).toEqual(["Read", "Glob", "Grep", "WebSearch", "WebFetch", SUBAGENT_TOOL_TOKEN]);

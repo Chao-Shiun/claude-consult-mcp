@@ -18,7 +18,9 @@ export const CODEX_SERVER_ID = "claude-consult";
 export const FOOTER_PREFIX = "[claude-consult]";
 export const CHILD_ENV_MAX_THINKING_TOKENS = "MAX_THINKING_TOKENS";
 export const FABLE_MODEL_MARKER = "fable";
-export const SUBAGENT_TOOL_TOKEN = "Task";
+// Verified 2026-07-09 on claude 2.1.163: the sub-agent tool token is "Agent";
+// "Task" matches no tool (a probe with it reports no sub-agent capability).
+export const SUBAGENT_TOOL_TOKEN = "Agent";
 
 export const ENV = deepFreeze({
   claudeBin: "CLAUDE_CONSULT_CLAUDE_BIN",
