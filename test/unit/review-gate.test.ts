@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
+import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { ClaudeConsultError, ERROR_CODES } from "../../src/errors.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
 import { resolveGateLogPath } from "../../src/gate-log.js";
-import { runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
+import { createDefaultReviewGateDeps, runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
 
 const CWD = process.platform === "win32" ? "C:\\repo-a" : "/repo-a";
 const CWD_B = process.platform === "win32" ? "C:\\repo-b" : "/repo-b";
@@ -133,6 +134,49 @@ function makeDeps(options: DepsOptions = {}): { readonly deps: ReviewGateDeps; r
 }
 
 describe("review-gate CLI", () => {
+  it("starts the default stdin read at deps creation", async () => {
+    const stdin = new PassThrough() as PassThrough & { isTTY?: boolean };
+    Object.defineProperty(stdin, "isTTY", { value: undefined });
+    const deps = createDefaultReviewGateDeps(() => undefined, () => undefined, stdin);
+
+    expect(stdin.listenerCount("data")).toBeGreaterThan(0);
+    stdin.end(JSON.stringify({ hook_event_name: "Stop", cwd: process.cwd(), last_assistant_message: "implemented validation" }));
+
+    await expect(deps.readHookClaim?.()).resolves.toBe("implemented validation");
+  });
+
+  it("awaits the hook claim once before the first git call", async () => {
+    const order: string[] = [];
+    let reads = 0;
+    const base = makeDeps();
+    const deps: ReviewGateDeps = {
+      ...base.deps,
+      readHookClaim: async () => {
+        reads += 1;
+        order.push("claim");
+        return "implemented validation";
+      },
+      runCommand: async (...args) => {
+        order.push("git");
+        return base.deps.runCommand(...args);
+      }
+    };
+
+    await expect(runReviewGate([], deps)).resolves.toBe(0);
+
+    expect(reads).toBe(1);
+    expect(order[0]).toBe("claim");
+  });
+
+  it("degrades a rejected hook claim read to the diff-only review", async () => {
+    const base = makeDeps();
+    const deps: ReviewGateDeps = { ...base.deps, readHookClaim: async () => Promise.reject(new Error("stdin failed")) };
+
+    await expect(runReviewGate([], deps)).resolves.toBe(0);
+
+    expect(base.recorded.requests).toHaveLength(1);
+  });
+
   it("fails open silently outside a git repository", async () => {
     const { deps, recorded } = makeDeps({ revParseExit: 128 });
 

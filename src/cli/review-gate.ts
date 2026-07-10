@@ -9,6 +9,7 @@ import { runCommand, type CommandResult, type RunCommandOptions } from "../run-c
 import { createDefaultRunner, type RunClaude } from "../claude/runner.js";
 import { composeAdvisorPrompt } from "../tools/advisor-prompt.js";
 import { isValidLocalAbsolutePath, resolveGateLogPath } from "../gate-log.js";
+import { parseStopHookClaim, startClaimRead, type ClaimInputStream } from "./stop-hook-claim.js";
 
 export const REVIEW_GATE_QUESTION = "This is an automatic post-turn review gate. In at most 10 bullet points, list only real problems in these changes - bugs, security issues, broken invariants - with file:line citations. If the changes look sound, reply with exactly: LGTM.";
 
@@ -22,6 +23,7 @@ export interface ReviewGateDeps {
   readonly appendFindings?: ((record: string) => Promise<void>) | undefined;
   readonly readMemo?: (() => Promise<string | undefined>) | undefined;
   readonly writeMemo?: ((content: string) => Promise<void>) | undefined;
+  readonly readHookClaim?: (() => Promise<string | undefined>) | undefined;
   readonly now?: (() => Date) | undefined;
 }
 
@@ -160,6 +162,12 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
     return skipped(deps, `INVALID_INPUT: ${parsed}`);
   }
 
+  try {
+    await deps.readHookClaim?.();
+  } catch {
+    // Hook stdin is optional and can never block the diff-only review path.
+  }
+
   let insideWorkTree: CommandResult;
   try {
     insideWorkTree = await runGit(deps, ["rev-parse", "--is-inside-work-tree"]);
@@ -236,7 +244,9 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
   }
 }
 
-export function createDefaultReviewGateDeps(print: (line: string) => void, printErr: (line: string) => void): ReviewGateDeps {
+export function createDefaultReviewGateDeps(print: (line: string) => void, printErr: (line: string) => void, stdin: ClaimInputStream = process.stdin): ReviewGateDeps {
+  const cwd = process.cwd();
+  const awaitRawClaim = startClaimRead(stdin);
   const gateLogPath = resolveGateLogPath(process.env, printErr);
   const memoPath = gateLogPath === undefined ? undefined : path.join(path.dirname(gateLogPath), "review-gate.state.json");
   const appendFindings = gateLogPath === undefined
@@ -268,7 +278,7 @@ export function createDefaultReviewGateDeps(print: (line: string) => void, print
     ? { ...process.env, [ENV.journalDir]: undefined }
     : process.env;
   return Object.freeze({
-    cwd: process.cwd(),
+    cwd,
     env: process.env,
     runCommand,
     createRunner: (model: string) => {
@@ -280,6 +290,7 @@ export function createDefaultReviewGateDeps(print: (line: string) => void, print
     printErr,
     appendFindings,
     readMemo,
-    writeMemo
+    writeMemo,
+    readHookClaim: async () => parseStopHookClaim(await awaitRawClaim(), cwd)
   });
 }

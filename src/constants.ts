@@ -73,7 +73,10 @@ export const LIMITS = deepFreeze({
   diffMaxBytes: 300_000,
   exhibitMaxBytes: 65_536,
   gateFindingsTailBytes: 512 * 1024,
-  gateFindingsEntryBytes: 8 * 1024
+  gateFindingsEntryBytes: 8 * 1024,
+  gateStdinMaxBytes: 256 * 1024,
+  gateStdinTimeoutMs: 1000,
+  gateClaimMaxBytes: 4 * 1024
 });
 
 export const CAPABILITY_TOOLS: Readonly<Record<Capability, readonly string[]>> = deepFreeze({

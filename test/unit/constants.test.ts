@@ -53,6 +53,9 @@ describe("constants", () => {
     expect(LIMITS.pathsMax).toBe(32);
     expect(LIMITS.gateFindingsTailBytes).toBe(512 * 1024);
     expect(LIMITS.gateFindingsEntryBytes).toBe(8 * 1024);
+    expect(LIMITS.gateStdinMaxBytes).toBe(256 * 1024);
+    expect(LIMITS.gateStdinTimeoutMs).toBe(1000);
+    expect(LIMITS.gateClaimMaxBytes).toBe(4 * 1024);
   });
 
   it("defines exactly three capability tiers without any write-capable tool", () => {
