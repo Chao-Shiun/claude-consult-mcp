@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 const README = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
 
 describe("README release notes", () => {
-  it("documents the v0.8 tool count, gate recall, effort ceiling, doctor trust check, and review gate behavior", () => {
+  it("documents the v0.9 approval behavior and existing tool contracts", () => {
     expect(README).toContain("|  9 tools by default; 10 with gate findings; 11 with journal + gate findings");
     expect(README).toContain("## The tools: nine by default, ten with gate findings, eleven with journal");
     expect(README).toContain("| `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |");
@@ -15,7 +15,8 @@ describe("README release notes", () => {
     expect(README).toContain("The tool reads the findings log resolved by the MCP server's environment");
     expect(README).toContain("tools whose table row lists `workspace_dir` require it");
     expect(README).toContain("each entry's `session_id` can be passed to `claude_continue` with that `repo` as `workspace_dir`");
-    expect(README).toContain("Every successful result that actually ran Claude ends with a machine-readable footer");
+    expect(README).toContain("Successful single-run results that actually ran Claude end with a machine-readable footer");
+    expect(README).toContain("`claude_panel` instead places one footer in each successful perspective section; failed perspective sections contain only the error");
     expect(README).toContain("consult-journal-YYYY-MM.jsonl");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate --gate-log <absolute-path>");
@@ -35,8 +36,28 @@ describe("README release notes", () => {
     expect(README).toContain("An explicit per-call `effort` above the ceiling is rejected with the allowed levels.");
     expect(README).toContain("Cancelling a tool call in your client also terminates the underlying claude process; nothing keeps running in the background.");
     expect(README).toContain("questions_for_caller");
+    expect(README).toContain("records origin metadata as `review-gate` so the opt-in journal can show the run");
+    expect(README).toContain("Gate journal entries use the first non-empty line of the actual findings");
+    expect(README).toContain("The default child allowlist is `Read`, `Glob`, `Grep` for `readonly`; it adds `WebSearch` and `WebFetch` for `research`");
+    expect(README).toContain("By default, `Agent` is added for `deep-research` calls that request `depth: \"deep\"`");
+    expect(README).toContain("`CLAUDE_CONSULT_ALLOWED_TOOLS` can replace the non-deep default with any valid non-forbidden tool tokens");
+    expect(README).toContain("`setup` can persist only `--model`, `--capability`, `--allowed-models`, and `--max-budget-usd` in the registered server environment");
+    expect(README).toContain("Configure the other variables directly for the MCP server in `~/.codex/config.toml`");
+    expect(README).toContain("Codex CLI `0.142.0` and `0.144.1`");
+    expect(README).toContain("`default_tools_approval_mode`: `\"auto\"` (the default), `\"prompt\"`, `\"writes\"`, or `\"approve\"`");
+    expect(README).toContain("All claude-consult tools declare the MCP `readOnlyHint` annotation, so the default mode auto-approves them with no configuration");
+    expect(README).toContain("set `default_tools_approval_mode = \"prompt\"` explicitly if you want to confirm every consultation");
+    expect(README).toContain("`~/.codex/config.toml` is shared by the Codex CLI and desktop app");
+    expect(README).toContain("the two install and update their engines independently");
+    expect(README).toContain("| MCP tool calls fail with user cancelled MCP tool call | Codex 0.144+ requires approval for tools not marked read-only; upgrade claude-consult-mcp to >= 0.9.0 (all tools declare the read-only annotation), or set default_tools_approval_mode = \"approve\" under [mcp_servers.claude-consult] in ~/.codex/config.toml |");
     expect(README).not.toContain("Every successful result ends with a machine-readable footer");
     expect(README).not.toContain("Every successful result from a Claude-spawning tool ends with a machine-readable footer");
+    expect(README).not.toContain("Every successful result that actually ran Claude ends with a machine-readable footer");
+    expect(README).not.toContain("the in-memory ledger and opt-in journal can show the run");
+    expect(README).not.toContain("Gate ledger and journal entries");
+    expect(README).not.toContain("plus the verified `Agent` sub-agent token only at `deep-research`");
+    expect(README).not.toContain("The `deep-research` tier adds only the verified `Agent` sub-agent token");
+    expect(README).not.toContain("Set them at registration time so they live in the Codex config");
     expect(README).not.toContain("receives Codex's Stop JSON payload");
     expect(README).not.toContain("passive output");
   });

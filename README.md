@@ -16,7 +16,7 @@ MCP stdio server (this package)
 claude -p --output-format json   (your existing Claude Code login)
 ```
 
-Verified in release tests against: Claude Code CLI `2.1.163`, Codex CLI `0.142.0`, MCP SDK `1.x`.
+Verified in release tests against: Claude Code CLI `2.1.163`, Codex CLI `0.142.0` and `0.144.1`, MCP SDK `1.x`.
 
 ## Prerequisites
 
@@ -38,7 +38,9 @@ startup_timeout_sec = 60
 tool_timeout_sec = 600
 ```
 
-Restart the Codex desktop app so it picks up the new server. Verify with:
+Codex 0.144 introduced per-server tool approval through `default_tools_approval_mode`: `"auto"` (the default), `"prompt"`, `"writes"`, or `"approve"`. All claude-consult tools declare the MCP `readOnlyHint` annotation, so the default mode auto-approves them with no configuration; set `default_tools_approval_mode = "prompt"` explicitly if you want to confirm every consultation.
+
+`~/.codex/config.toml` is shared by the Codex CLI and desktop app, but the two install and update their engines independently. Restart the desktop app after changing the file so it reloads the server configuration. Verify with:
 
 ```bash
 npx -y claude-consult-mcp doctor          # environment checks (free)
@@ -91,7 +93,7 @@ Want recall across restarts? Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolut
 
 Use `claude_gate_findings` when the user mentions review-gate findings or when starting work in a repository where the automatic review gate is installed. The tool reads the findings log resolved by the MCP server's environment: `CLAUDE_CONSULT_GATE_LOG`, or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`. If the Stop hook was installed with a different embedded log path than the MCP server environment resolves, the hook and the tool read different files; configure the same path in both places. Each entry includes a `session_id` and `repo`; each entry's `session_id` can be passed to `claude_continue` with that `repo` as `workspace_dir` to discuss that gate review with the Claude session that produced it.
 
-Every successful result that actually ran Claude ends with a machine-readable footer:
+Successful single-run results that actually ran Claude end with a machine-readable footer. `claude_panel` instead places one footer in each successful perspective section; failed perspective sections contain only the error:
 
 ```
 ---
@@ -141,7 +143,7 @@ Example Codex prompt: `"Verify this plan with claude_panel using the security an
 
 ### Automatic review gate
 
-`claude-consult-mcp review-gate` reviews the current git worktree's uncommitted `HEAD` diff with Claude. It uses hardened git diff flags (`--no-ext-diff --no-textconv`), includes `git status --porcelain`, runs through the same advisory runner as the MCP tools, and records origin metadata as `review-gate` so the in-memory ledger and opt-in journal can show the run.
+`claude-consult-mcp review-gate` reviews the current git worktree's uncommitted `HEAD` diff with Claude. It uses hardened git diff flags (`--no-ext-diff --no-textconv`), includes `git status --porcelain`, runs through the same advisory runner as the MCP tools, and records origin metadata as `review-gate` so the opt-in journal can show the run.
 
 The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs exit 0 with stderr `review-gate: diff too large (N bytes), skipped`. Missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
 
@@ -149,7 +151,7 @@ When it finds something to report, the gate records findings to `CLAUDE_CONSULT_
 
 When a findings log is configured, the gate keeps a per-repository cooldown memo named `review-gate.state.json` beside the resolved findings log. If the diff and status are unchanged since that repository's last successful review, the gate exits 0 without calling Claude and prints `review-gate: diff unchanged since last review, skipped` to stderr. Use `--force` to review anyway. The cooldown is inactive when neither `CLAUDE_CONSULT_GATE_LOG` nor `CLAUDE_CONSULT_JOURNAL_DIR` resolves a findings log.
 
-Gate ledger and journal entries use the first non-empty line of the actual findings, so `claude_consult_history` shows what the gate found. `LGTM` means the gate completed with a clean pass.
+Gate journal entries use the first non-empty line of the actual findings, so `claude_consult_history` shows what the gate found. `LGTM` means the gate completed with a clean pass.
 
 The default gate model is `haiku` because the hook can run after many turns. Override it per run with `--model <m>` or set `CLAUDE_CONSULT_GATE_MODEL`; the flag wins over the environment variable. Use `--quiet` to suppress the exact `LGTM` case:
 
@@ -201,7 +203,7 @@ The machine owner sets policy ceilings via environment variables; Codex chooses 
 | Codex (within the ceiling) | Per-call reasoning depth | `effort` tool argument |
 | Owner only | Optional budget cap | `CLAUDE_CONSULT_MAX_BUDGET_USD` |
 
-There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Agent` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models still default to `--effort max`, but that default is silently clamped to `CLAUDE_CONSULT_MAX_EFFORT` when the owner sets a ceiling. An explicit per-call `effort` above the ceiling is rejected with the allowed levels.
+There is **no write tier**. The default child allowlist is `Read`, `Glob`, `Grep` for `readonly`; it adds `WebSearch` and `WebFetch` for `research`. By default, `Agent` is added for `deep-research` calls that request `depth: "deep"`. The owner-only `CLAUDE_CONSULT_ALLOWED_TOOLS` can replace the non-deep default with any valid non-forbidden tool tokens. `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models still default to `--effort max`, but that default is silently clamped to `CLAUDE_CONSULT_MAX_EFFORT` when the owner sets a ceiling. An explicit per-call `effort` above the ceiling is rejected with the allowed levels.
 
 No budget cap is set by default because this package assumes a Claude subscription login with no marginal cost per run. Machines billed through an API key can opt into a spending guard by setting `CLAUDE_CONSULT_MAX_BUDGET_USD` or running `setup --max-budget-usd <n>`.
 
@@ -224,12 +226,12 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
 | `CLAUDE_CONSULT_LOG_LEVEL` | `info` | `silent` / `error` / `info` / `debug` (stderr only) |
 
-Set them at registration time so they live in the Codex config: `npx -y claude-consult-mcp setup --model sonnet --capability readonly --allowed-models sonnet,haiku --max-budget-usd 1`.
+`setup` can persist only `--model`, `--capability`, `--allowed-models`, and `--max-budget-usd` in the registered server environment: `npx -y claude-consult-mcp setup --model sonnet --capability readonly --allowed-models sonnet,haiku --max-budget-usd 1`. Configure the other variables directly for the MCP server in `~/.codex/config.toml`.
 
 ## Security notes
 
 - Read-only by design: the exact Claude Code write/execute tool tokens `Write`, `Edit`, `NotebookEdit`, and `Bash` are always rejected before the child process is spawned; permission mode is never bypassed.
-- The `deep-research` tier adds only the verified `Agent` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
+- The `deep-research` tier's default adds only the verified `Agent` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
 - The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
 - No credentials are stored by this package. The child Claude process uses the machine's existing Claude Code login and inherits the server process environment like a normal child process.
@@ -255,6 +257,7 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | Server never starts on Windows | The registration must launch `cmd /c npx ...`; run `doctor` to detect this, or re-run `setup` |
 | npx says the command is not recognized right after a release | Windows npx has a brief bin-shim race on freshly published versioned specs; use the bare package name (npx -y claude-consult-mcp) or retry after a minute |
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
+| MCP tool calls fail with user cancelled MCP tool call | Codex 0.144+ requires approval for tools not marked read-only; upgrade claude-consult-mcp to >= 0.9.0 (all tools declare the read-only annotation), or set default_tools_approval_mode = "approve" under [mcp_servers.claude-consult] in ~/.codex/config.toml |
 | `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | `claude_gate_findings` is not listed | Set `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>`, configure the same path for the MCP server, then call `claude_gate_findings` |
