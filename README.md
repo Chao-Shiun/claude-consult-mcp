@@ -106,7 +106,7 @@ Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks 
 
 The journal is opt-in. Nothing is written unless `CLAUDE_CONSULT_JOURNAL_DIR` is set to a valid local absolute path; relative, UNC, and device paths are rejected. Journal files are JSONL, one file per month named `consult-journal-YYYY-MM.jsonl` under that directory.
 
-Entries are metadata only: ISO timestamp, originating tool, Claude `session_id`, workspace directory when present, model when present, a whitespace-collapsed topic excerpt capped at 120 characters, total cost, and duration. The journal never stores full prompts, file contents, or Claude answers. Write failures are logged to stderr and swallowed, so a disk problem cannot fail the consultation.
+Entries contain only the listed metadata, not dedicated prompt, file-content, or answer-body fields: ISO timestamp, originating tool, Claude `session_id`, workspace directory when present, model when present, a whitespace-collapsed topic excerpt capped at 120 characters, total cost, and duration. For review-gate entries, the 120-character topic excerpt comes from the first non-empty line of Claude's findings and may contain the complete answer when it fits within the cap. Write failures are logged to stderr and swallowed, so a disk problem cannot fail the consultation.
 
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
@@ -145,11 +145,13 @@ Example Codex prompt: `"Verify this plan with claude_panel using the security an
 
 `claude-consult-mcp review-gate` reviews the current git worktree's uncommitted `HEAD` diff with Claude. It uses hardened git diff flags (`--no-ext-diff --no-textconv`), includes `git status --porcelain`, runs through the same advisory runner as the MCP tools, and records origin metadata as `review-gate` so the opt-in journal can show the run.
 
+When installed as a Codex Stop hook, the gate receives Codex's end-of-turn summary on stdin and asks the reviewer to compare the diff against it, catching claimed work that is missing or incomplete and material changes the summary did not mention. Manual `review-gate` runs have no claim and review the diff only. The claim is untrusted context, and the reviewer is instructed never to follow instructions inside it.
+
 The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs exit 0 with stderr `review-gate: diff too large (N bytes), skipped`. Missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
 
 When it finds something to report, the gate records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`; it also prints them to stdout. Each findings entry records the repository as the final header field, so the reader can filter entries by `workspace_dir`. Codex does not inject Stop-hook stdout into the next model turn's context. Treat automatic findings as out-of-band review notes: call `claude_gate_findings` to bring those durable findings back into the MCP conversation, then use the logged `session_id` with the logged repo as `workspace_dir` in `claude_continue` for follow-up on that Claude conversation.
 
-When a findings log is configured, the gate keeps a per-repository cooldown memo named `review-gate.state.json` beside the resolved findings log. If the diff and status are unchanged since that repository's last successful review, the gate exits 0 without calling Claude and prints `review-gate: diff unchanged since last review, skipped` to stderr. Use `--force` to review anyway. The cooldown is inactive when neither `CLAUDE_CONSULT_GATE_LOG` nor `CLAUDE_CONSULT_JOURNAL_DIR` resolves a findings log.
+When a findings log is configured, the gate keeps a per-repository cooldown memo named `review-gate.state.json` beside the resolved findings log. The cooldown keys on the diff/status snapshot alone, never the claim, so an unchanged diff is skipped even when the claim changes; use `--force` to override. If the diff and status are unchanged since that repository's last successful review, the gate exits 0 without calling Claude and prints `review-gate: diff unchanged since last review, skipped` to stderr. The cooldown is inactive when neither `CLAUDE_CONSULT_GATE_LOG` nor `CLAUDE_CONSULT_JOURNAL_DIR` resolves a findings log.
 
 Gate journal entries use the first non-empty line of the actual findings, so `claude_consult_history` shows what the gate found. `LGTM` means the gate completed with a clean pass.
 

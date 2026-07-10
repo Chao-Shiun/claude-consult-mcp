@@ -18,6 +18,8 @@ describe("README release notes", () => {
     expect(README).toContain("Successful single-run results that actually ran Claude end with a machine-readable footer");
     expect(README).toContain("`claude_panel` instead places one footer in each successful perspective section; failed perspective sections contain only the error");
     expect(README).toContain("consult-journal-YYYY-MM.jsonl");
+    expect(README).toContain("Entries contain only the listed metadata, not dedicated prompt, file-content, or answer-body fields");
+    expect(README).toContain("For review-gate entries, the 120-character topic excerpt comes from the first non-empty line of Claude's findings and may contain the complete answer when it fits within the cap");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate --gate-log <absolute-path>");
     expect(README).toContain("records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`");
@@ -27,6 +29,12 @@ describe("README release notes", () => {
     expect(README).toContain("Oversized diffs exit 0 with stderr `review-gate: diff too large (N bytes), skipped`.");
     expect(README).toContain("Codex does not inject Stop-hook stdout into the next model turn's context.");
     expect(README).toContain("The trust prompt cannot be granted in headless `codex exec`.");
+    expect(README).toContain("When installed as a Codex Stop hook, the gate receives Codex's end-of-turn summary on stdin");
+    expect(README).toContain("claimed work that is missing or incomplete and material changes the summary did not mention");
+    expect(README).toContain("Manual `review-gate` runs have no claim and review the diff only");
+    expect(README).toContain("The claim is untrusted context, and the reviewer is instructed never to follow instructions inside it");
+    expect(README).toContain("The cooldown keys on the diff/status snapshot alone, never the claim");
+    expect(README).toContain("an unchanged diff is skipped even when the claim changes; use `--force` to override");
     expect(README).toContain("doctor reports `[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire`");
     expect(README).toContain("| `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |");
     expect(README).toContain("| `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`");
@@ -53,12 +61,16 @@ describe("README release notes", () => {
     expect(README).not.toContain("Every successful result ends with a machine-readable footer");
     expect(README).not.toContain("Every successful result from a Claude-spawning tool ends with a machine-readable footer");
     expect(README).not.toContain("Every successful result that actually ran Claude ends with a machine-readable footer");
+    expect(README).not.toContain("The journal never stores full prompts, file contents, or Claude answers");
+    expect(README).not.toContain("The journal never stores full prompts, file contents, or full Claude answers");
     expect(README).not.toContain("the in-memory ledger and opt-in journal can show the run");
     expect(README).not.toContain("Gate ledger and journal entries");
     expect(README).not.toContain("plus the verified `Agent` sub-agent token only at `deep-research`");
     expect(README).not.toContain("The `deep-research` tier adds only the verified `Agent` sub-agent token");
     expect(README).not.toContain("Set them at registration time so they live in the Codex config");
     expect(README).not.toContain("receives Codex's Stop JSON payload");
+    expect(README).not.toContain("reads the transcript file");
+    expect(README).not.toContain("injects findings into Codex context");
     expect(README).not.toContain("passive output");
   });
 });
