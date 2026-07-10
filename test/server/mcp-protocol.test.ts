@@ -113,6 +113,7 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_panel");
     expect(harness.client.getInstructions()).toContain("stance \"critical\"");
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
+    expect(harness.client.getInstructions()).toContain("effort");
     expect(harness.client.getInstructions()).toContain("When Claude returns questions (a 'Questions for you:' section or questions_for_caller in JSON), answer them via claude_continue instead of abandoning the thread.");
   });
 
@@ -131,12 +132,13 @@ describe("MCP protocol layer", () => {
     expect(reviewDiff?.description).toContain("actual code changes");
     expect((reviewDiff?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
-    expect(Object.keys(properties).sort()).toEqual(["context", "model", "question", "session_id", "workspace_dir"]);
+    expect(Object.keys(properties).sort()).toEqual(["context", "effort", "model", "question", "session_id", "workspace_dir"]);
+    expect((properties.effort as { enum?: string[] }).enum).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
     const continueTool = listed.tools.find((tool) => tool.name === "claude_continue");
     expect((continueTool?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["message", "session_id"]);
     const continueProperties = (continueTool?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
-    expect(Object.keys(continueProperties).sort()).toEqual(["message", "model", "session_id", "stance", "workspace_dir"]);
+    expect(Object.keys(continueProperties).sort()).toEqual(["effort", "message", "model", "session_id", "stance", "workspace_dir"]);
     expect((continueProperties.stance as { enum?: string[] }).enum).toEqual(["neutral", "critical"]);
     const panel = listed.tools.find((tool) => tool.name === "claude_panel");
     const panelProperties = (panel?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};

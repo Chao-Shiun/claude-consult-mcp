@@ -11,6 +11,7 @@ const argsSchema = z.object({
   message: promptTextSchema,
   workspace_dir: commonToolShape.workspace_dir,
   model: commonToolShape.model,
+  effort: commonToolShape.effort,
   stance: z.enum(["neutral", "critical"]).optional().describe("Set to \"critical\" when continuing an adversarial review or debate so Claude keeps its reviewer discipline instead of drifting agreeable.")
 });
 
@@ -24,6 +25,7 @@ export function createContinueSessionTool(toolContext: ToolContext): ConsultTool
       message: promptTextSchema.describe("Your follow-up message for the same conversation."),
       workspace_dir: commonToolShape.workspace_dir,
       model: commonToolShape.model,
+      effort: commonToolShape.effort,
       stance: z.enum(["neutral", "critical"]).optional().describe("Set to \"critical\" when continuing an adversarial review or debate so Claude keeps its reviewer discipline instead of drifting agreeable.")
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {

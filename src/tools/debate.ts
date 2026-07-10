@@ -2,7 +2,7 @@ import { z } from "zod";
 import { composeAdvisorPrompt } from "./advisor-prompt.js";
 import { createExhibitBudget, extractFileExhibit, type NeutralExhibit } from "./exhibits.js";
 import { CRITICAL_REVIEWER_PROMPT } from "./second-opinion.js";
-import { absolutePathSchema, modelSchema, promptTextSchema, sessionIdSchema, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
+import { absolutePathSchema, commonToolShape, modelSchema, promptTextSchema, sessionIdSchema, type ConsultTool, type ToolContext, type ToolExecuteExtra } from "./shared-schemas.js";
 import { STRUCTURED_FORMAT_DESCRIPTION, toSuccessResult } from "./tool-result.js";
 
 const EVIDENCE_TYPES = ["file", "url", "command_output", "reasoning"] as const;
@@ -50,7 +50,8 @@ const openArgsSchema = z.object({
   position: promptTextSchema,
   evidence: evidenceArraySchema,
   workspace_dir: absolutePathSchema,
-  model: modelSchema.optional()
+  model: modelSchema.optional(),
+  effort: commonToolShape.effort
 });
 
 const replyArgsSchema = z.object({
@@ -62,7 +63,8 @@ const replyArgsSchema = z.object({
     argument: promptTextSchema,
     evidence: evidenceItemSchema.optional()
   })).min(1).max(20),
-  model: modelSchema.optional()
+  model: modelSchema.optional(),
+  effort: commonToolShape.effort
 });
 
 type EvidenceItem = z.infer<typeof evidenceItemSchema>;
@@ -167,7 +169,8 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
       position: promptTextSchema.describe("Your current position or recommendation."),
       evidence: evidenceArraySchema.describe("Evidence items supporting your position."),
       workspace_dir: absolutePathSchema.describe("Absolute path to the project this debate is about; becomes Claude's working directory."),
-      model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default.")
+      model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
+      effort: commonToolShape.effort
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = openArgsSchema.parse(rawArgs);
@@ -179,6 +182,7 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
+        effort: args.effort,
         signal: extra?.signal,
         origin: { tool: "claude_debate_open", excerpt: args.topic }
       }), { structuredExpected: true });
@@ -195,7 +199,8 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
       session_id: sessionIdSchema.describe("session_id from claude_debate_open or the previous debate round."),
       workspace_dir: absolutePathSchema.describe("Absolute path to the same project used by the open debate call."),
       responses: replyArgsSchema.shape.responses.describe("Accept or rebut Claude's prior claims."),
-      model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default.")
+      model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
+      effort: commonToolShape.effort
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = replyArgsSchema.parse(rawArgs);
@@ -208,6 +213,7 @@ export function createDebateReplyTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
+        effort: args.effort,
         sessionId: args.session_id,
         signal: extra?.signal,
         origin: { tool: "claude_debate_reply", excerpt: args.responses[0]?.argument ?? "" }

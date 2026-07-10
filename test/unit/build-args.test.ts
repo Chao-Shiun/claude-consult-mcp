@@ -165,6 +165,28 @@ describe("resolveRunPolicy", () => {
     const fableDefault = loadConfig({ CLAUDE_CONSULT_MODEL: "claude-fable-5" });
     expect(resolveRunPolicy(fableDefault, {}).effort).toBe("max");
   });
+
+  it("passes explicit effort through when no ceiling is configured", () => {
+    const config = loadConfig({});
+    expect(resolveRunPolicy(config, { effort: "xhigh" }).effort).toBe("xhigh");
+  });
+
+  it("accepts explicit effort below and at the configured ceiling", () => {
+    const config = loadConfig({ CLAUDE_CONSULT_MAX_EFFORT: "high" });
+    expect(resolveRunPolicy(config, { effort: "low" }).effort).toBe("low");
+    expect(resolveRunPolicy(config, { effort: "high" }).effort).toBe("high");
+  });
+
+  it("rejects explicit effort above the configured ceiling and lists allowed levels", () => {
+    const config = loadConfig({ CLAUDE_CONSULT_MAX_EFFORT: "high" });
+    expectInvalidInput(() => resolveRunPolicy(config, { effort: "xhigh" }), "low, medium, high");
+    expectInvalidInput(() => resolveRunPolicy(config, { effort: "max" }), "low, medium, high");
+  });
+
+  it("clamps the Fable default to the configured effort ceiling", () => {
+    const config = loadConfig({ CLAUDE_CONSULT_MAX_EFFORT: "high" });
+    expect(resolveRunPolicy(config, { model: "claude-fable-5" }).effort).toBe("high");
+  });
 });
 
 describe("isFableModel", () => {

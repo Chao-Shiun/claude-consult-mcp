@@ -1,5 +1,5 @@
 import path from "node:path";
-import { CAPABILITIES, CAPABILITY_TOOLS, DEFAULTS, ENV, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, type Capability, type LogLevel } from "./constants.js";
+import { CAPABILITIES, CAPABILITY_TOOLS, DEFAULTS, EFFORT_LEVELS, ENV, FORBIDDEN_TOOLS, LIMITS, LOG_LEVELS, PATTERNS, type Capability, type Effort, type LogLevel } from "./constants.js";
 import { ClaudeConsultError } from "./errors.js";
 
 export interface Config {
@@ -11,6 +11,7 @@ export interface Config {
   readonly allowedTools: readonly string[];
   readonly maxBudgetUsd: number | undefined;
   readonly maxThinkingTokens: number | undefined;
+  readonly maxEffort: Effort | undefined;
   readonly journalDir: string | undefined;
   readonly maxConcurrency: number;
   readonly logLevel: LogLevel;
@@ -77,6 +78,17 @@ function parseChoice<T extends string>(env: Env, name: string, choices: readonly
   }
   if (!(choices as readonly string[]).includes(raw)) {
     fail(name, `must be one of ${choices.join(", ")}, got "${raw}"`, `set ${name} to one of the listed values or unset it for "${fallback}"`);
+  }
+  return raw as T;
+}
+
+function parseOptionalChoice<T extends string>(env: Env, name: string, choices: readonly T[]): T | undefined {
+  const raw = readValue(env, name);
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!(choices as readonly string[]).includes(raw)) {
+    fail(name, `must be one of ${choices.join(", ")}, got "${raw}"`, `set ${name} to one of ${choices.join(", ")} or unset it for no ceiling`);
   }
   return raw as T;
 }
@@ -149,6 +161,7 @@ export function loadConfig(env: Env = process.env): Config {
     allowedTools: parseAllowedTools(env, capability),
     maxBudgetUsd: parsePositiveNumber(env, ENV.maxBudgetUsd),
     maxThinkingTokens: parsePositiveInt(env, ENV.maxThinkingTokens),
+    maxEffort: parseOptionalChoice(env, ENV.maxEffort, EFFORT_LEVELS),
     journalDir: parseJournalDir(env),
     maxConcurrency: parseBoundedInt(env, ENV.maxConcurrency, LIMITS.concurrencyMin, LIMITS.concurrencyMax, DEFAULTS.maxConcurrency),
     logLevel: parseChoice(env, ENV.logLevel, LOG_LEVELS, DEFAULTS.logLevel)

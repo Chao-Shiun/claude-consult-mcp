@@ -73,7 +73,8 @@ describe("claude_debate_open tool", () => {
       position: "The patch is safe because the touched line only changes logging.",
       evidence: [{ claim: "The relevant code is only line 10.", type: "file", ref: "src/example.ts:10-11", content: "caller supplied note" }],
       workspace_dir: workspace,
-      model: "haiku"
+      model: "haiku",
+      effort: "high"
     }, { signal });
 
     const request = requests[0];
@@ -95,6 +96,7 @@ describe("claude_debate_open tool", () => {
     expect(request?.addDirs).toEqual([workspace]);
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
+    expect(request?.effort).toBe("high");
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_debate_open", excerpt: "Should we trust the cache invalidation patch?" });
     expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);
@@ -178,13 +180,15 @@ describe("claude_debate_reply tool", () => {
         { item: "claim 1", action: "accept", argument: "I accept this because the cited line matches." },
         { item: "counter 2", action: "rebut", argument: "This misses a newer file.", evidence: { claim: "New file refutes it.", type: "file", ref: "reply.txt" } }
       ],
-      model: "haiku"
+      model: "haiku",
+      effort: "low"
     }, { signal });
 
     const request = requests[0];
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
+    expect(request?.effort).toBe("low");
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_debate_reply", excerpt: "I accept this because the cited line matches." });
     expect(request?.prompt).toContain('<round-response item="claim 1" action="accept">');

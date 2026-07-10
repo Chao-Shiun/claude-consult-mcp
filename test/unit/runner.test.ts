@@ -3,7 +3,7 @@ import { loadConfig } from "../../src/config.js";
 import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
 import { createLogger } from "../../src/logger.js";
-import { createDefaultRunner, createRunner, type RunnerDeps } from "../../src/claude/runner.js";
+import { createDefaultRunner, createRunner, type RunnerDeps, type RunnerRequest } from "../../src/claude/runner.js";
 import type { RawRunOutput, } from "../../src/claude/parse-output.js";
 import type { SpawnClaudeRequest } from "../../src/claude/spawn-claude.js";
 import { createSessionLedger } from "../../src/session-ledger.js";
@@ -13,6 +13,44 @@ import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 const silentLogger = createLogger("silent", { write: () => true });
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const ABSOLUTE_JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tmp/journal";
+
+const effortArgCases: Array<{
+  readonly name: string;
+  readonly env: Record<string, string>;
+  readonly request: Pick<RunnerRequest, "model" | "effort">;
+  readonly expectedEffort: string | undefined;
+}> = [
+  {
+    name: "explicit effort below the ceiling passes through",
+    env: { CLAUDE_CONSULT_MAX_EFFORT: "high" },
+    request: { effort: "low" },
+    expectedEffort: "low"
+  },
+  {
+    name: "explicit effort at the ceiling passes through",
+    env: { CLAUDE_CONSULT_MAX_EFFORT: "high" },
+    request: { effort: "high" },
+    expectedEffort: "high"
+  },
+  {
+    name: "Fable default is clamped to a lower ceiling",
+    env: { CLAUDE_CONSULT_MAX_EFFORT: "high" },
+    request: { model: "claude-fable-5" },
+    expectedEffort: "high"
+  },
+  {
+    name: "Fable default stays max without a ceiling",
+    env: {},
+    request: { model: "claude-fable-5" },
+    expectedEffort: "max"
+  },
+  {
+    name: "non-Fable without an explicit effort emits no effort flag",
+    env: {},
+    request: {},
+    expectedEffort: undefined
+  }
+];
 
 function successRaw(result = "pong"): RawRunOutput {
   return {
@@ -29,6 +67,11 @@ interface Harness {
 
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function effortArg(args: readonly string[]): string | undefined {
+  const index = args.indexOf("--effort");
+  return index === -1 ? undefined : args[index + 1];
 }
 
 function makeHarness(env: Record<string, string> = {}, spawnImpl?: RunnerDeps["spawnImpl"]): Harness {
@@ -99,6 +142,29 @@ describe("createRunner", () => {
     await runner.run({ prompt: "structured", jsonSchema: VERDICT_JSON_SCHEMA });
     const args = harness.spawnRequests[0]?.args ?? [];
     expect(args[args.indexOf("--json-schema") + 1]).toBe(VERDICT_JSON_SCHEMA);
+  });
+
+  it.each(effortArgCases)("resolves effort in the child argv: $name", async ({ env, request, expectedEffort }) => {
+    const harness = makeHarness(env);
+    const runner = createRunner(harness.deps);
+    await runner.run({ prompt: "choose effort", ...request });
+    expect(effortArg(harness.spawnRequests[0]?.args ?? [])).toBe(expectedEffort);
+  });
+
+  it("rejects explicit effort above the configured ceiling before spawning", async () => {
+    const harness = makeHarness({ CLAUDE_CONSULT_MAX_EFFORT: "high" });
+    const runner = createRunner(harness.deps);
+    try {
+      await runner.run({ prompt: "too deep", effort: "xhigh" });
+      expect.unreachable("expected INVALID_INPUT");
+    } catch (error) {
+      expect(isClaudeConsultError(error)).toBe(true);
+      if (isClaudeConsultError(error)) {
+        expect(error.code).toBe("INVALID_INPUT");
+        expect(error.hint).toContain("low, medium, high");
+      }
+    }
+    expect(harness.spawnRequests).toHaveLength(0);
   });
 
   it("rejects deep analysis unless the machine enables deep-research", async () => {

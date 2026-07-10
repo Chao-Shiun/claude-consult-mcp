@@ -1,12 +1,13 @@
 import path from "node:path";
 import { z } from "zod";
-import { LIMITS, PATTERNS } from "../constants.js";
+import { EFFORT_LEVELS, LIMITS, PATTERNS, type Effort } from "../constants.js";
 import type { RunClaude } from "../claude/runner.js";
 import type { ToolResult } from "./tool-result.js";
 
 export const sessionIdSchema = z.string().regex(PATTERNS.sessionId, { message: "session_id must be the UUID printed in a previous result footer" });
 
 export const modelSchema = z.string().regex(PATTERNS.model, { message: "model must be an alias like opus, sonnet, haiku, or a full model id" });
+export const effortSchema = z.enum(EFFORT_LEVELS);
 
 // Cap free-text tool inputs at the schema boundary so oversized payloads are
 // rejected during parsing instead of after being fully buffered and parsed.
@@ -24,20 +25,23 @@ export const depthSchema = z.enum(["standard", "deep"]).optional()
 export const commonToolShape = {
   workspace_dir: absolutePathSchema.optional().describe("Absolute path to the project this relates to; becomes Claude's working directory. Reuse the same value when continuing a session."),
   model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
+  effort: effortSchema.optional().describe("Claude effort override: lower is faster and cheaper, higher is deeper reasoning; subject to the server's configured ceiling. Omit to use the model's default."),
   session_id: sessionIdSchema.optional().describe("session_id from a previous result footer to continue that conversation.")
 };
 
 export interface CommonToolArgs {
   readonly workspace_dir?: string | undefined;
   readonly model?: string | undefined;
+  readonly effort?: Effort | undefined;
   readonly session_id?: string | undefined;
 }
 
 export type AnalysisDepth = z.infer<typeof depthSchema>;
 
-export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; sessionId: string | undefined; cwd: string | undefined } {
+export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; effort: Effort | undefined; sessionId: string | undefined; cwd: string | undefined } {
   return {
     model: args.model,
+    effort: args.effort,
     sessionId: args.session_id,
     cwd: args.workspace_dir
   };

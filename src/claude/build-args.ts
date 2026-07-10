@@ -1,15 +1,16 @@
 import path from "node:path";
-import { EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, LIMITS, PATTERNS } from "../constants.js";
+import { EFFORT_LEVELS, ENV, FABLE_MODEL_MARKER, FORBIDDEN_TOOLS, LIMITS, PATTERNS, type Effort } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 
 export interface RunPolicyRequest {
   readonly model?: string | undefined;
+  readonly effort?: Effort | undefined;
 }
 
 export interface RunPolicy {
   readonly model: string | undefined;
-  readonly effort: string | undefined;
+  readonly effort: Effort | undefined;
   readonly budgetUsd: number | undefined;
 }
 
@@ -32,6 +33,30 @@ export function isFableModel(model: string | undefined): boolean {
   return model !== undefined && model.toLowerCase().includes(FABLE_MODEL_MARKER);
 }
 
+function effortRank(effort: Effort): number {
+  return EFFORT_LEVELS.indexOf(effort);
+}
+
+function allowedEfforts(maxEffort: Effort): readonly Effort[] {
+  return EFFORT_LEVELS.slice(0, effortRank(maxEffort) + 1);
+}
+
+function resolveEffort(config: Config, request: RunPolicyRequest, model: string | undefined): Effort | undefined {
+  const effective = request.effort ?? (isFableModel(model) ? "max" : undefined);
+  if (effective === undefined) {
+    return undefined;
+  }
+  const maxEffort = config.maxEffort;
+  if (maxEffort === undefined || effortRank(effective) <= effortRank(maxEffort)) {
+    return effective;
+  }
+  if (request.effort !== undefined) {
+    const allowed = allowedEfforts(maxEffort).join(", ");
+    invalid(`effort "${request.effort}" exceeds ${ENV.maxEffort} ceiling "${maxEffort}"`, `allowed efforts: ${allowed}`);
+  }
+  return maxEffort;
+}
+
 export function resolveRunPolicy(config: Config, request: RunPolicyRequest): RunPolicy {
   if (request.model !== undefined && !PATTERNS.model.test(request.model)) {
     invalid(`requested model "${request.model}" does not match the safe model pattern`, "use an alias like opus/sonnet/haiku or a full model id");
@@ -40,7 +65,7 @@ export function resolveRunPolicy(config: Config, request: RunPolicyRequest): Run
   if (model !== undefined && config.allowedModels !== undefined && !config.allowedModels.includes(model)) {
     invalid(`model "${model}" is not allowed by ${ENV.allowedModels}`, `allowed models: ${config.allowedModels.join(", ")}`);
   }
-  return Object.freeze({ model, effort: isFableModel(model) ? "max" : undefined, budgetUsd: config.maxBudgetUsd });
+  return Object.freeze({ model, effort: resolveEffort(config, request, model), budgetUsd: config.maxBudgetUsd });
 }
 
 function validateTools(allowedTools: readonly string[]): void {

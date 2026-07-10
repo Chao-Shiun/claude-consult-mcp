@@ -82,11 +82,12 @@ describe("claude_review_diff tool", () => {
     const tool = createReviewDiffTool(context);
     const signal = new AbortController().signal;
 
-    const result = await tool.execute({ workspace_dir: repo }, { signal });
+    const result = await tool.execute({ workspace_dir: repo, effort: "high" }, { signal });
 
     expect(textOf(result)).toContain("diff review");
     const request = requests[0];
     expect(request?.cwd).toBe(repo);
+    expect(request?.effort).toBe("high");
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_review_diff", excerpt: "diff review" });
     expect(request?.addDirs).toEqual([repo]);

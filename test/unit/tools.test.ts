@@ -79,12 +79,13 @@ describe("ask_claude tool", () => {
   it("wraps context in background tags and forwards common args", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
-    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", session_id: SESSION_ID });
+    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", session_id: SESSION_ID, effort: "high" });
     const request = requests[0];
     expect(request?.prompt).toBe("<background-context>\ntried X\n</background-context>\n\nq");
     expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.model).toBe("haiku");
     expect(request?.sessionId).toBe(SESSION_ID);
+    expect(request?.effort).toBe("high");
     expect(request).not.toHaveProperty("budgetUsd");
   });
 
@@ -220,12 +221,13 @@ describe("claude_continue tool", () => {
     const signal = new AbortController().signal;
     expect(tool.name).toBe("claude_continue");
     expect(tool.description).toContain(CONTINUE_QUESTIONS_SENTENCE);
-    const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR }, { signal });
+    const result = await tool.execute({ session_id: SESSION_ID, message: "and double it", workspace_dir: WORKSPACE_DIR, effort: "low" }, { signal });
     expectSuccessResult(result);
     const request = requests[0];
     expect(request?.prompt).toBe("and double it");
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.cwd).toBe(WORKSPACE_DIR);
+    expect(request?.effort).toBe("low");
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_continue", excerpt: "and double it" });
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);

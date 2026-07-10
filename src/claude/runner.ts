@@ -1,5 +1,5 @@
 import os from "node:os";
-import { CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, LIMITS } from "../constants.js";
+import { CAPABILITY_TOOLS, CHILD_ENV_MAX_THINKING_TOKENS, LIMITS, type Effort } from "../constants.js";
 import { ClaudeConsultError } from "../errors.js";
 import type { Config } from "../config.js";
 import { createJournal, type Journal } from "../journal.js";
@@ -14,6 +14,7 @@ import { createDefaultSpawnDeps, spawnClaude, type SpawnClaudeRequest } from "./
 export interface RunnerRequest {
   readonly prompt: string;
   readonly model?: string | undefined;
+  readonly effort?: Effort | undefined;
   readonly sessionId?: string | undefined;
   readonly appendSystemPrompt?: string | undefined;
   readonly jsonSchema?: string | undefined;
@@ -101,7 +102,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const prompt = applyDepthGuidance(request.prompt, request.depth);
     validatePrompt(prompt);
     const allowedTools = resolveAllowedTools(deps.config, request.depth);
-    const policy = resolveRunPolicy(deps.config, { model: request.model });
+    const policy = resolveRunPolicy(deps.config, { model: request.model, effort: request.effort });
     const args = buildClaudeArgs({
       allowedTools,
       model: policy.model,

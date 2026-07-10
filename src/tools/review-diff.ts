@@ -16,6 +16,7 @@ const argsSchema = z.object({
   question: promptTextSchema.optional(),
   depth: depthSchema,
   model: commonToolShape.model,
+  effort: commonToolShape.effort,
   session_id: commonToolShape.session_id
 });
 
@@ -61,6 +62,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       question: promptTextSchema.optional().describe("Optional focus for the diff review."),
       depth: depthSchema,
       model: commonToolShape.model,
+      effort: commonToolShape.effort,
       session_id: commonToolShape.session_id
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
@@ -89,6 +91,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         model: args.model,
+        effort: args.effort,
         sessionId: args.session_id,
         depth: args.depth,
         signal: extra?.signal,

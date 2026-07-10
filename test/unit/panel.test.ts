@@ -153,10 +153,11 @@ describe("claude_panel tool", () => {
     expect(requests).toHaveLength(2);
   });
 
-  it("forwards model to every panel request", async () => {
+  it("forwards model and effort to every panel request", async () => {
     const { requests, context } = makeContext();
     const tool = createPanelTool(context);
-    await tool.execute({ task: "review model forwarding", perspectives: ["security", "testing"], model: "haiku" });
+    await tool.execute({ task: "review model forwarding", perspectives: ["security", "testing"], model: "haiku", effort: "xhigh" });
     expect(requests.map((request) => request.model)).toEqual(["haiku", "haiku"]);
+    expect(requests.map((request) => request.effort)).toEqual(["xhigh", "xhigh"]);
   });
 });
