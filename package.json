@@ -1,6 +1,6 @@
 {
   "name": "claude-consult-mcp",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "MCP stdio server that lets OpenAI Codex consult local Claude Code for co-analysis, second opinions, and read-only file review",
   "type": "module",
   "license": "MIT",
