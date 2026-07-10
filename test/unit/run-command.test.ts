@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -10,7 +10,7 @@ describe("runCommand", () => {
     const result = await runCommand(process.execPath, ["-e", "process.stdout.write(process.cwd())"], { cwd });
 
     expect(result.exitCode).toBe(0);
-    expect(path.resolve(result.stdout)).toBe(path.resolve(cwd));
+    expect(await realpath(result.stdout)).toBe(await realpath(cwd));
     expect(result.stderr).toBe("");
   });
 });
