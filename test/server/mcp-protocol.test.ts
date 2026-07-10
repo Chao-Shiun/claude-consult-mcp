@@ -57,6 +57,12 @@ function journalWith(entries: readonly JournalEntry[]): Journal {
   });
 }
 
+function expectReadOnlyAnnotations(tools: Awaited<ReturnType<Client["listTools"]>>["tools"]): void {
+  for (const tool of tools) {
+    expect(tool.annotations).toEqual({ readOnlyHint: true });
+  }
+}
+
 async function startHarness(optionsOrError?: HarnessOptions | unknown): Promise<TestHarness> {
   const options: HarnessOptions = isHarnessOptions(optionsOrError)
     ? optionsOrError
@@ -124,6 +130,7 @@ describe("MCP protocol layer", () => {
   it("lists exactly the nine consult tools without a journal", async () => {
     harness = await startHarness();
     const listed = await harness.client.listTools();
+    expectReadOnlyAnnotations(listed.tools);
     const names = listed.tools.map((tool) => tool.name).sort();
     expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const ask = listed.tools.find((tool) => tool.name === "ask_claude");
@@ -164,6 +171,7 @@ describe("MCP protocol layer", () => {
   it("lists exactly ten consult tools with a gate log", async () => {
     harness = await startHarness({ env: { CLAUDE_CONSULT_GATE_LOG: GATE_LOG } });
     const listed = await harness.client.listTools();
+    expectReadOnlyAnnotations(listed.tools);
     const names = listed.tools.map((tool) => tool.name).sort();
     expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const findings = listed.tools.find((tool) => tool.name === "claude_gate_findings");
@@ -176,6 +184,7 @@ describe("MCP protocol layer", () => {
   it("lists exactly eleven consult tools with a journal directory", async () => {
     harness = await startHarness({ env: { CLAUDE_CONSULT_JOURNAL_DIR: JOURNAL_DIR }, journal: journalWith([]) });
     const listed = await harness.client.listTools();
+    expectReadOnlyAnnotations(listed.tools);
     const names = listed.tools.map((tool) => tool.name).sort();
     expect(names).toEqual(["ask_claude", "claude_consult_history", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const history = listed.tools.find((tool) => tool.name === "claude_consult_history");

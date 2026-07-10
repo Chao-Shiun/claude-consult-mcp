@@ -60,7 +60,8 @@ export function createServer(deps: ServerDeps): McpServer {
     server.registerTool(tool.name, {
       title: tool.title,
       description: tool.description,
-      inputSchema: tool.inputSchema
+      inputSchema: tool.inputSchema,
+      annotations: { readOnlyHint: true }
     }, async (args: Record<string, unknown>, extra) => {
       const progressToken = extra._meta?.progressToken;
       const started = Date.now();
