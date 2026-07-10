@@ -142,6 +142,10 @@ The gate is fail-open by design. Outside a git repo or on a clean tree it exits 
 
 When it finds something to report, the gate records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`; it also prints them to stdout. Codex does not inject Stop-hook stdout into the next model turn's context. Treat automatic findings as out-of-band review notes: read the log file directly, or use the logged or journaled `session_id` with `claude_continue` for follow-up on that Claude conversation.
 
+When a findings log is configured, the gate keeps a per-repository cooldown memo named `review-gate.state.json` beside the resolved findings log. If the diff and status are unchanged since that repository's last successful review, the gate exits 0 without calling Claude and prints `review-gate: diff unchanged since last review, skipped` to stderr. Use `--force` to review anyway. The cooldown is inactive when neither `CLAUDE_CONSULT_GATE_LOG` nor `CLAUDE_CONSULT_JOURNAL_DIR` resolves a findings log.
+
+Gate ledger and journal entries use the first non-empty line of the actual findings, so `claude_consult_history` shows what the gate found. `LGTM` means the gate completed with a clean pass.
+
 The default gate model is `haiku` because the hook can run after many turns. Override it per run with `--model <m>` or set `CLAUDE_CONSULT_GATE_MODEL`; the flag wins over the environment variable. Use `--quiet` to suppress the exact `LGTM` case:
 
 ```bash
@@ -241,6 +245,7 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | Calls die around 60s | Raise `tool_timeout_sec` for this server in `~/.codex/config.toml` (setup prints the snippet) |
 | `[CLAUDE_TIMEOUT]` | Raise `CLAUDE_CONSULT_TIMEOUT_MS` (default 600000) |
 | Server never starts on Windows | The registration must launch `cmd /c npx ...`; run `doctor` to detect this, or re-run `setup` |
+| npx says the command is not recognized right after a release | Windows npx has a brief bin-shim race on freshly published versioned specs; use the bare package name (npx -y claude-consult-mcp) or retry after a minute |
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
 | `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>` and inspect the log out of band |
