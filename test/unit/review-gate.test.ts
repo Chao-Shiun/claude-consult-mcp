@@ -352,12 +352,12 @@ describe("review-gate CLI", () => {
     expect(recorded.stdout).toEqual(["claude-consult review-gate:\n- src/a.ts:1 has a bug"]);
   });
 
-  it("appends durable findings with timestamp, model, session id, and answer", async () => {
+  it("appends durable findings with timestamp, model, session id, repo, and answer", async () => {
     const { deps, recorded } = makeDeps({ result: { ...ENVELOPE, result: "- src/a.ts:1 has a bug" } });
 
     await expect(runReviewGate([], deps)).resolves.toBe(0);
 
-    expect(recorded.findings).toEqual([`## 2026-07-09T03:20:11.000Z | model: haiku | session_id: ${ENVELOPE.sessionId}
+    expect(recorded.findings).toEqual([`## 2026-07-09T03:20:11.000Z | model: haiku | session_id: ${ENVELOPE.sessionId} | repo: ${CWD}
 - src/a.ts:1 has a bug
 
 `]);

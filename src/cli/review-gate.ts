@@ -237,7 +237,7 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
     const reviewedAt = (deps.now ?? (() => new Date()))().toISOString();
     if (deps.appendFindings !== undefined) {
       try {
-        await deps.appendFindings(`## ${reviewedAt} | model: ${model} | session_id: ${envelope.sessionId}\n${answer}\n\n`);
+        await deps.appendFindings(`## ${reviewedAt} | model: ${model} | session_id: ${envelope.sessionId} | repo: ${deps.cwd}\n${answer}\n\n`);
       } catch {
         deps.printErr("review-gate: findings log unavailable");
       }
