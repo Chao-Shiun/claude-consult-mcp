@@ -18,6 +18,7 @@ export interface DoctorDeps {
   readonly nodeVersion: string;
   readonly runCommand: (command: string, args: readonly string[]) => Promise<CommandResult>;
   readonly readConfigToml: () => Promise<string | undefined>;
+  readonly readHooksJson: () => Promise<string | undefined>;
   readonly liveProbe: () => Promise<LiveProbeResult>;
   readonly print: (line: string) => void;
 }
@@ -31,6 +32,51 @@ function extractSection(config: string, header: string): string {
 
 function extractClaudeVersion(versionOutput: string): string {
   return versionOutput.match(/\d+\.\d+\.\d+/u)?.[0] ?? "unknown";
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function findReviewGateHookSlots(hooksJson: string): "invalid" | Array<{ readonly groupIndex: number; readonly hookIndex: number }> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(hooksJson);
+  } catch {
+    return "invalid";
+  }
+  if (!isObject(parsed) || !isObject(parsed.hooks) || !Array.isArray(parsed.hooks.Stop)) {
+    return [];
+  }
+  const slots: Array<{ readonly groupIndex: number; readonly hookIndex: number }> = [];
+  parsed.hooks.Stop.forEach((group, groupIndex) => {
+    if (!isObject(group) || !Array.isArray(group.hooks)) {
+      return;
+    }
+    group.hooks.forEach((hook, hookIndex) => {
+      if (isObject(hook) && typeof hook.command === "string" && hook.command.includes(`${SERVER_NAME} review-gate`)) {
+        slots.push(Object.freeze({ groupIndex, hookIndex }));
+      }
+    });
+  });
+  return slots;
+}
+
+function hasTrustedHookRecord(config: string | undefined, groupIndex: number, hookIndex: number): boolean {
+  if (config === undefined) {
+    return false;
+  }
+  const needle = `hooks.json:stop:${groupIndex}:${hookIndex}`;
+  const lines = config.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]?.includes(needle) === true) {
+      const nearby = lines.slice(index, index + 6).join("\n");
+      if (nearby.includes("trusted_hash")) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Promise<number> {
@@ -90,6 +136,21 @@ export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Prom
     }
   }
 
+  const hooksJson = await deps.readHooksJson();
+  if (hooksJson !== undefined) {
+    const hookSlots = findReviewGateHookSlots(hooksJson);
+    if (hookSlots === "invalid") {
+      warn("~/.codex/hooks.json is not valid JSON");
+    } else if (hookSlots.length > 0) {
+      const trusted = hookSlots.some((slot) => hasTrustedHookRecord(config, slot.groupIndex, slot.hookIndex));
+      if (trusted) {
+        ok("review-gate hook trust record found");
+      } else {
+        warn("review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire");
+      }
+    }
+  }
+
   if (live) {
     const probe = await deps.liveProbe();
     if (probe.ok) {
@@ -110,6 +171,13 @@ export function createDefaultDoctorDeps(print: (line: string) => void): DoctorDe
     readConfigToml: async () => {
       try {
         return await readFile(path.join(os.homedir(), ".codex", "config.toml"), "utf8");
+      } catch {
+        return undefined;
+      }
+    },
+    readHooksJson: async () => {
+      try {
+        return await readFile(path.join(os.homedir(), ".codex", "hooks.json"), "utf8");
       } catch {
         return undefined;
       }

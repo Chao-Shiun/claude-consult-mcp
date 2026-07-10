@@ -8,6 +8,7 @@ interface DepsOptions {
   claudeResult?: { exitCode: number | null; stdout: string; stderr: string } | Error;
   codexResult?: { exitCode: number | null; stdout: string; stderr: string } | Error;
   configText?: string | undefined;
+  hooksText?: string | undefined;
   liveResult?: { ok: boolean; detail: string };
 }
 
@@ -30,6 +31,7 @@ function makeDeps(options: DepsOptions = {}): { lines: string[]; liveCalls: numb
         return result;
       },
       readConfigToml: async () => options.configText,
+      readHooksJson: async () => options.hooksText,
       liveProbe: async () => {
         liveCalls.push(1);
         return options.liveResult ?? { ok: true, detail: "claude answered" };
@@ -43,6 +45,20 @@ function makeDeps(options: DepsOptions = {}): { lines: string[]; liveCalls: numb
 
 const REGISTERED_WIN = `[mcp_servers.claude-consult]\ncommand = "cmd"\nargs = ["/c", "npx", "-y", "claude-consult-mcp"]\n\n[other]\n`;
 const REGISTERED_WIN_NO_CMD = `[mcp_servers.claude-consult]\ncommand = "npx"\nargs = ["-y", "claude-consult-mcp"]\n\n[other]\n`;
+const HOOKS_WITHOUT_GATE = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "node existing.js" }] }] } });
+const HOOKS_WITH_GATE = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "npx -y claude-consult-mcp review-gate" }] }] } });
+const HOOKS_WITH_GATE_AT_1_0 = JSON.stringify({ hooks: { Stop: [
+  { hooks: [{ type: "command", command: "node existing.js" }] },
+  { hooks: [{ type: "command", command: "npx -y claude-consult-mcp review-gate" }] }
+] } });
+const HOOKS_WITH_TWO_GATES = JSON.stringify({ hooks: { Stop: [{ hooks: [
+  { type: "command", command: "npx -y claude-consult-mcp review-gate" },
+  { type: "command", command: "cmd /c npx -y claude-consult-mcp review-gate" }
+] }] } });
+const TRUSTED_0_0 = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:stop:0:0']\ntrusted_hash = "abc123"\n`;
+const TRUSTED_0_1 = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:stop:0:1']\ntrusted_hash = "abc123"\n`;
+const TRUSTED_1_0 = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:stop:1:0']\ntrusted_hash = "abc123"\n`;
+const UNTRUSTED_WITH_DISTANT_HASH = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:stop:0:0']\nfoo = "bar"\n# 1\n# 2\n# 3\n# 4\n# 5\n# 6\ntrusted_hash = "too-far"\n`;
 
 describe("runDoctor", () => {
   it("reports all-ok on a healthy machine", async () => {
@@ -103,6 +119,53 @@ describe("runDoctor", () => {
     const { lines, deps } = makeDeps({ configText: REGISTERED_WIN_NO_CMD });
     await runDoctor([], deps);
     expect(lines.join("\n")).toContain("cmd /c");
+  });
+
+  it("stays silent when hooks.json is absent or does not contain the review gate", async () => {
+    const absent = makeDeps({ configText: REGISTERED_WIN });
+    await runDoctor([], absent.deps);
+    expect(absent.lines.join("\n")).not.toContain("review-gate hook");
+
+    const withoutGate = makeDeps({ configText: REGISTERED_WIN, hooksText: HOOKS_WITHOUT_GATE });
+    await runDoctor([], withoutGate.deps);
+    expect(withoutGate.lines.join("\n")).not.toContain("review-gate hook");
+  });
+
+  it("warns without failing when hooks.json is invalid JSON", async () => {
+    const { lines, deps } = makeDeps({ configText: REGISTERED_WIN, hooksText: "{ not json" });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines).toContain("[warn] ~/.codex/hooks.json is not valid JSON");
+  });
+
+  it("reports ok when a review-gate hook trust record exists", async () => {
+    const { lines, deps } = makeDeps({ configText: TRUSTED_0_0, hooksText: HOOKS_WITH_GATE });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines).toContain("[ok] review-gate hook trust record found");
+  });
+
+  it("warns without changing the exit code when the review-gate hook is not trusted", async () => {
+    const { lines, deps } = makeDeps({ configText: REGISTERED_WIN, hooksText: HOOKS_WITH_GATE });
+    const exitCode = await runDoctor([], deps);
+    expect(exitCode).toBe(0);
+    expect(lines).toContain("[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire");
+  });
+
+  it("finds trust records for non-zero hook slots and any matching duplicate slot", async () => {
+    const nonZero = makeDeps({ configText: TRUSTED_1_0, hooksText: HOOKS_WITH_GATE_AT_1_0 });
+    await runDoctor([], nonZero.deps);
+    expect(nonZero.lines).toContain("[ok] review-gate hook trust record found");
+
+    const duplicate = makeDeps({ configText: TRUSTED_0_1, hooksText: HOOKS_WITH_TWO_GATES });
+    await runDoctor([], duplicate.deps);
+    expect(duplicate.lines).toContain("[ok] review-gate hook trust record found");
+  });
+
+  it("warns when the trust key exists but trusted_hash is not nearby", async () => {
+    const { lines, deps } = makeDeps({ configText: UNTRUSTED_WITH_DISTANT_HASH, hooksText: HOOKS_WITH_GATE });
+    await runDoctor([], deps);
+    expect(lines).toContain("[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire");
   });
 
   it("fails on a Node version below 20", async () => {
