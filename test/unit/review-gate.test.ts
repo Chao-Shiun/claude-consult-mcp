@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { ClaudeConsultError, ERROR_CODES } from "../../src/errors.js";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
-import { resolveGateLogPath, runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
+import { resolveGateLogPath } from "../../src/gate-log.js";
+import { runReviewGate, REVIEW_GATE_QUESTION, type ReviewGateDeps } from "../../src/cli/review-gate.js";
 
 const CWD = process.platform === "win32" ? "C:\\repo-a" : "/repo-a";
 const CWD_B = process.platform === "win32" ? "C:\\repo-b" : "/repo-b";

@@ -71,7 +71,9 @@ export const LIMITS = deepFreeze({
   pathsMax: 32,
   jsonSchemaMaxBytes: 8_192,
   diffMaxBytes: 300_000,
-  exhibitMaxBytes: 65_536
+  exhibitMaxBytes: 65_536,
+  gateFindingsTailBytes: 512 * 1024,
+  gateFindingsEntryBytes: 8 * 1024
 });
 
 export const CAPABILITY_TOOLS: Readonly<Record<Capability, readonly string[]>> = deepFreeze({

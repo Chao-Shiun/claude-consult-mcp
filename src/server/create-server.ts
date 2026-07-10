@@ -13,8 +13,10 @@ import { createReviewFilesTool } from "../tools/review-files.js";
 import { createSecondOpinionTool } from "../tools/second-opinion.js";
 import { createSessionsTool } from "../tools/sessions.js";
 import { createHistoryTool } from "../tools/history.js";
+import { createGateFindingsTool } from "../tools/gate-findings.js";
 import type { ConsultTool, ToolContext } from "../tools/shared-schemas.js";
 import { toErrorResult } from "../tools/tool-result.js";
+import { resolveGateLogPath } from "../gate-log.js";
 
 export interface ServerDeps {
   readonly runClaude: RunClaude;
@@ -22,6 +24,7 @@ export interface ServerDeps {
   readonly progressHeartbeatMs?: number;
   readonly ledger?: SessionLedger | undefined;
   readonly journal?: Journal | undefined;
+  readonly env?: Readonly<Record<string, string | undefined>> | undefined;
 }
 
 export const SERVER_INSTRUCTIONS = [
@@ -39,6 +42,7 @@ export function createServer(deps: ServerDeps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
   const progressHeartbeatMs = Math.max(50, deps.progressHeartbeatMs ?? 10_000);
   const context: ToolContext = { runClaude: deps.runClaude };
+  const gateLogPath = resolveGateLogPath(deps.env ?? process.env, (line) => deps.logger.error(line));
   const tools: readonly ConsultTool[] = [
     createAskClaudeTool(context),
     createSecondOpinionTool(context),
@@ -48,6 +52,7 @@ export function createServer(deps: ServerDeps): McpServer {
     createReviewFilesTool(context),
     createReviewDiffTool(context),
     createContinueSessionTool(context),
+    ...(gateLogPath === undefined ? [] : [createGateFindingsTool(gateLogPath)]),
     ...(deps.ledger === undefined ? [] : [createSessionsTool(deps.ledger)]),
     ...(deps.journal === undefined ? [] : [createHistoryTool(deps.journal)])
   ];

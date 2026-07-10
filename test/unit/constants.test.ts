@@ -51,6 +51,8 @@ describe("constants", () => {
     expect(LIMITS.stderrSnippetChars).toBe(2_000);
     expect(LIMITS.stdoutSampleChars).toBe(500);
     expect(LIMITS.pathsMax).toBe(32);
+    expect(LIMITS.gateFindingsTailBytes).toBe(512 * 1024);
+    expect(LIMITS.gateFindingsEntryBytes).toBe(8 * 1024);
   });
 
   it("defines exactly three capability tiers without any write-capable tool", () => {

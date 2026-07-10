@@ -11,6 +11,8 @@ import { createSessionLedger, type SessionLedger } from "../../src/session-ledge
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const silentLogger = createLogger("silent", { write: () => true });
+const GATE_LOG = process.platform === "win32" ? "C:\\logs\\review-gate.log" : "/logs/review-gate.log";
+const JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/journal";
 
 const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   result: "the answer",
@@ -37,6 +39,7 @@ interface HarnessOptions {
   readonly progressHeartbeatMs?: number;
   readonly ledger?: SessionLedger;
   readonly journal?: Journal;
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -44,7 +47,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function isHarnessOptions(value: unknown): value is HarnessOptions {
-  return value !== null && typeof value === "object" && ("runClaude" in value || "runClaudeError" in value || "progressHeartbeatMs" in value || "ledger" in value || "journal" in value);
+  return value !== null && typeof value === "object" && ("runClaude" in value || "runClaudeError" in value || "progressHeartbeatMs" in value || "ledger" in value || "journal" in value || "env" in value);
 }
 
 function journalWith(entries: readonly JournalEntry[]): Journal {
@@ -71,7 +74,8 @@ async function startHarness(optionsOrError?: HarnessOptions | unknown): Promise<
     logger: silentLogger,
     progressHeartbeatMs: options.progressHeartbeatMs,
     ledger: options.ledger ?? createSessionLedger(),
-    journal: options.journal
+    journal: options.journal,
+    env: options.env
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "protocol-test", version: "0.0.1" });
@@ -157,11 +161,23 @@ describe("MCP protocol layer", () => {
     expect(Object.keys(sessionProperties).sort()).toEqual(["limit", "workspace_dir"]);
   });
 
-  it("lists exactly ten consult tools with a journal", async () => {
-    harness = await startHarness({ journal: journalWith([]) });
+  it("lists exactly ten consult tools with a gate log", async () => {
+    harness = await startHarness({ env: { CLAUDE_CONSULT_GATE_LOG: GATE_LOG } });
     const listed = await harness.client.listTools();
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_consult_history", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
+    expect(names).toEqual(["ask_claude", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
+    const findings = listed.tools.find((tool) => tool.name === "claude_gate_findings");
+    expect(findings?.description).toContain("review-gate findings");
+    expect(findings?.description).toContain("claude_continue");
+    const findingsProperties = (findings?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect(Object.keys(findingsProperties).sort()).toEqual(["limit", "workspace_dir"]);
+  });
+
+  it("lists exactly eleven consult tools with a journal directory", async () => {
+    harness = await startHarness({ env: { CLAUDE_CONSULT_JOURNAL_DIR: JOURNAL_DIR }, journal: journalWith([]) });
+    const listed = await harness.client.listTools();
+    const names = listed.tools.map((tool) => tool.name).sort();
+    expect(names).toEqual(["ask_claude", "claude_consult_history", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const history = listed.tools.find((tool) => tool.name === "claude_consult_history");
     expect(history?.description).toContain("List past Claude consultations recorded in this machine's journal");
     expect(history?.description).toContain("Only available when the machine owner has set CLAUDE_CONSULT_JOURNAL_DIR.");

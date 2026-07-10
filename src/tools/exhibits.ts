@@ -57,7 +57,7 @@ function isWithinWorkspace(workspaceDir: string, candidate: string): boolean {
   return relative === "" || (relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function truncateToBytes(value: string, maxBytes: number): string {
+export function truncateToBytes(value: string, maxBytes: number): string {
   if (maxBytes <= 0) {
     return "";
   }

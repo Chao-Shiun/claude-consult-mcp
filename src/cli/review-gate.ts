@@ -8,6 +8,7 @@ import { createLogger } from "../logger.js";
 import { runCommand, type CommandResult, type RunCommandOptions } from "../run-command.js";
 import { createDefaultRunner, type RunClaude } from "../claude/runner.js";
 import { composeAdvisorPrompt } from "../tools/advisor-prompt.js";
+import { isValidLocalAbsolutePath, resolveGateLogPath } from "../gate-log.js";
 
 export const REVIEW_GATE_QUESTION = "This is an automatic post-turn review gate. In at most 10 bullet points, list only real problems in these changes - bugs, security issues, broken invariants - with file:line citations. If the changes look sound, reply with exactly: LGTM.";
 
@@ -149,30 +150,6 @@ function skipped(deps: ReviewGateDeps, code: string): number {
   return 0;
 }
 
-function validLocalAbsolute(value: string): boolean {
-  return path.isAbsolute(value) && !PATTERNS.uncOrDevice.test(value);
-}
-
-export function resolveGateLogPath(env: Readonly<Record<string, string | undefined>>, printErr: (line: string) => void): string | undefined {
-  const gateLog = readEnv(env, ENV.gateLog);
-  if (gateLog !== undefined) {
-    if (!validLocalAbsolute(gateLog)) {
-      printErr(`review-gate: findings log disabled (invalid ${ENV.gateLog})`);
-      return undefined;
-    }
-    return gateLog;
-  }
-  const journalDir = readEnv(env, ENV.journalDir);
-  if (journalDir !== undefined) {
-    if (!validLocalAbsolute(journalDir)) {
-      printErr(`review-gate: findings log disabled (invalid ${ENV.journalDir})`);
-      return undefined;
-    }
-    return path.join(journalDir, "review-gate.log");
-  }
-  return undefined;
-}
-
 function composePrompt(diff: string, status: string): string {
   return `Review the following uncommitted code changes. You may Read the surrounding files in the repository for context before judging.\n\n<git-status>\n${status.trim() === "" ? "(clean)" : status.trim()}\n</git-status>\n\n<diff>\n${diff}\n</diff>\n\n<question>\n${REVIEW_GATE_QUESTION}\n</question>`;
 }
@@ -287,7 +264,7 @@ export function createDefaultReviewGateDeps(print: (line: string) => void, print
       await writeFile(memoPath, content, "utf8");
     };
   const journalDir = readEnv(process.env, ENV.journalDir);
-  const runnerEnv = journalDir !== undefined && !validLocalAbsolute(journalDir)
+  const runnerEnv = journalDir !== undefined && !isValidLocalAbsolutePath(journalDir)
     ? { ...process.env, [ENV.journalDir]: undefined }
     : process.env;
   return Object.freeze({
