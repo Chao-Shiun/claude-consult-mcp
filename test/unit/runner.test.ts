@@ -16,7 +16,7 @@ const ABSOLUTE_JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tm
 
 function successRaw(result = "pong"): RawRunOutput {
   return {
-    stdout: `{"type":"result","is_error":false,"result":"${result}","session_id":"${SESSION_ID}","total_cost_usd":0.01,"duration_ms":1200,"num_turns":1}`,
+    stdout: JSON.stringify({ type: "result", is_error: false, result, session_id: SESSION_ID, total_cost_usd: 0.01, duration_ms: 1200, num_turns: 1 }),
     stderrTail: "",
     exitCode: 0
   };
@@ -325,6 +325,35 @@ describe("createRunner", () => {
       costUsd: 0.01,
       durationMs: 1200
     }]);
+  });
+
+  it("uses the first non-empty result line for the origin excerpt when requested", async () => {
+    const ledger = createSessionLedger();
+    const entries: JournalEntry[] = [];
+    const journal: Journal = {
+      append: async (entry) => {
+        entries.push(entry);
+      },
+      read: async () => []
+    };
+    const harness = makeHarness({}, async () => successRaw("\n  first finding  \nsecond finding"));
+    const runner = createRunner({ ...harness.deps, ledger, journal });
+
+    await runner.run({ prompt: "hi", origin: { tool: "review-gate", excerpt: "static excerpt", excerptFromResult: true } });
+    await flush();
+
+    expect(ledger.list()[0]?.excerpt).toBe("first finding");
+    expect(entries[0]?.excerpt).toBe("  first finding  ");
+  });
+
+  it("falls back to the static origin excerpt when the result is whitespace", async () => {
+    const ledger = createSessionLedger();
+    const harness = makeHarness({}, async () => successRaw(" \n\t "));
+    const runner = createRunner({ ...harness.deps, ledger });
+
+    await runner.run({ prompt: "hi", origin: { tool: "review-gate", excerpt: "static excerpt", excerptFromResult: true } });
+
+    expect(ledger.list()[0]?.excerpt).toBe("static excerpt");
   });
 
   it("skips journal writes when unset and when origin is absent", async () => {

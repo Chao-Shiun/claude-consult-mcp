@@ -21,7 +21,7 @@ export interface RunnerRequest {
   readonly cwd?: string | undefined;
   readonly depth?: "standard" | "deep" | undefined;
   readonly signal?: AbortSignal | undefined;
-  readonly origin?: { readonly tool: string; readonly excerpt: string } | undefined;
+  readonly origin?: { readonly tool: string; readonly excerpt: string; readonly excerptFromResult?: boolean } | undefined;
 }
 
 export type RunClaude = (request: RunnerRequest) => Promise<ClaudeEnvelope>;
@@ -158,14 +158,16 @@ export function createRunner(deps: RunnerDeps): Runner {
     });
     const envelope = parseClaudeOutput(raw);
     if (request.origin !== undefined) {
-      ledger.record({ sessionId: envelope.sessionId, tool: request.origin.tool, workspaceDir: request.cwd, model: request.model, excerpt: request.origin.excerpt });
+      const resultExcerpt = envelope.result.split(/\r?\n/).find((line) => line.trim() !== "");
+      const excerpt = request.origin.excerptFromResult === true && resultExcerpt !== undefined ? resultExcerpt : request.origin.excerpt;
+      ledger.record({ sessionId: envelope.sessionId, tool: request.origin.tool, workspaceDir: request.cwd, model: request.model, excerpt });
       void journal?.append({
         ts: new Date().toISOString(),
         sessionId: envelope.sessionId,
         tool: request.origin.tool,
         workspaceDir: request.cwd,
         model: request.model,
-        excerpt: request.origin.excerpt,
+        excerpt,
         costUsd: envelope.totalCostUsd,
         durationMs: envelope.durationMs
       }).catch((error: unknown) => {

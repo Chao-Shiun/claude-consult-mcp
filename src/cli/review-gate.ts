@@ -158,7 +158,7 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
       addDirs: [deps.cwd],
       cwd: deps.cwd,
       model,
-      origin: { tool: "review-gate", excerpt: "automatic post-turn diff review" }
+      origin: { tool: "review-gate", excerpt: "automatic post-turn diff review", excerptFromResult: true }
     });
     const answer = envelope.result.trim();
     if (deps.appendFindings !== undefined) {
