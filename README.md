@@ -10,7 +10,7 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  9 tools by default; 10 with the opt-in consultation journal
+   |  9 tools by default; 10 with gate findings; 11 with journal + gate findings
    |  zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
@@ -63,7 +63,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The tools: nine by default, ten with journal
+## The tools: nine by default, ten with gate findings, eleven with journal
 
 | Tool | Use it for | Required args |
 |---|---|---|
@@ -76,17 +76,22 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_panel` | Multi-perspective verification in one call; N perspectives = N Claude runs | `task` |
 | `claude_continue` | Follow-ups in the same conversation | `session_id`, `message` |
 | `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |
+| `claude_gate_findings` | Read recent automatic review-gate findings back in-band without a Claude run | none (optional `workspace_dir`, `limit`) |
 | `claude_consult_history` | Recover past consultation metadata from the opt-in machine journal across Codex sessions and server restarts | none (optional `workspace_dir`, `limit`) |
 
 `claude_continue` also accepts `stance: "critical"` for follow-ups after an adversarial review or debate so Claude keeps its reviewer discipline.
 
-Claude-calling tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory — reuse it when continuing a session) and `model`. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations. `claude_sessions` reads only the in-memory metadata ledger; `claude_consult_history` reads only the opt-in journal. Neither tool invokes Claude.
+Most Claude-calling tools also accept optional `workspace_dir` (absolute path; becomes Claude's working directory - reuse it when continuing a session), `model`, and `effort`; tools whose table row lists `workspace_dir` require it. Continuation-capable tools also accept `session_id`; `claude_panel` always starts fresh conversations. `claude_sessions` reads only the in-memory metadata ledger, `claude_gate_findings` reads only the configured review-gate findings log, and `claude_consult_history` reads only the opt-in journal. None of those recall tools invokes Claude.
+
+Claude-calling tools also accept optional `effort` for per-call reasoning depth within the machine owner's configured ceiling.
 
 Losing a session? Call `claude_sessions` to list recent conversations from this server process, newest first, then pass the recovered `session_id` and same `workspace_dir` to `claude_continue`.
 
 Want recall across restarts? Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute directory path. The server then registers `claude_consult_history`, which lists journal entries newest first and can filter by exact `workspace_dir`.
 
-Every successful result ends with a machine-readable footer:
+Use `claude_gate_findings` when the user mentions review-gate findings or when starting work in a repository where the automatic review gate is installed. The tool reads the findings log resolved by the MCP server's environment: `CLAUDE_CONSULT_GATE_LOG`, or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`. If the Stop hook was installed with a different embedded log path than the MCP server environment resolves, the hook and the tool read different files; configure the same path in both places. Each entry includes a `session_id` and `repo`; each entry's `session_id` can be passed to `claude_continue` with that `repo` as `workspace_dir` to discuss that gate review with the Claude session that produced it.
+
+Every successful result that actually ran Claude ends with a machine-readable footer:
 
 ```
 ---
@@ -140,7 +145,7 @@ Example Codex prompt: `"Verify this plan with claude_panel using the security an
 
 The gate is fail-open by design. Outside a git repo or on a clean tree it exits 0 silently. Oversized diffs exit 0 with stderr `review-gate: diff too large (N bytes), skipped`. Missing git, missing Claude, auth failures, timeouts, malformed Claude output, and other gate errors exit 0 with a one-line stderr `review-gate: skipped (...)` note. It never blocks the caller's workflow.
 
-When it finds something to report, the gate records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`; it also prints them to stdout. Codex does not inject Stop-hook stdout into the next model turn's context. Treat automatic findings as out-of-band review notes: read the log file directly, or use the logged or journaled `session_id` with `claude_continue` for follow-up on that Claude conversation.
+When it finds something to report, the gate records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`; it also prints them to stdout. Each findings entry records the repository as the final header field, so the reader can filter entries by `workspace_dir`. Codex does not inject Stop-hook stdout into the next model turn's context. Treat automatic findings as out-of-band review notes: call `claude_gate_findings` to bring those durable findings back into the MCP conversation, then use the logged `session_id` with the logged repo as `workspace_dir` in `claude_continue` for follow-up on that Claude conversation.
 
 When a findings log is configured, the gate keeps a per-repository cooldown memo named `review-gate.state.json` beside the resolved findings log. If the diff and status are unchanged since that repository's last successful review, the gate exits 0 without calling Claude and prints `review-gate: diff unchanged since last review, skipped` to stderr. Use `--force` to review anyway. The cooldown is inactive when neither `CLAUDE_CONSULT_GATE_LOG` nor `CLAUDE_CONSULT_JOURNAL_DIR` resolves a findings log.
 
@@ -163,7 +168,7 @@ npx -y claude-consult-mcp setup --remove-review-gate
 
 Setup edits `~/.codex/hooks.json`, creates a timestamped `hooks.json.bak-YYYYMMDDHHMMSS` backup before modifying an existing hooks file, preserves unrelated hooks, and replaces an existing `claude-consult-mcp review-gate` entry instead of duplicating it. Passing `--gate-log` or `--journal-dir` embeds the matching environment variable into the hook command; both paths must be local absolute paths. If neither flag is supplied, durable findings require Codex to already pass `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to hooks.
 
-One-time trust: after `setup --install-review-gate`, Codex will not run the hook until you approve it once in an interactive Codex session. The trust prompt cannot be granted in headless `codex exec`. Review and approve the hook through Codex's hook trust flow when prompted.
+One-time trust: after `setup --install-review-gate`, Codex will not run the hook until you approve it once in an interactive Codex session. The trust prompt cannot be granted in headless `codex exec`. Review and approve the hook through Codex's hook trust flow when prompted. doctor reports `[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire` when it finds the hook installed without a nearby `trusted_hash` record in `~/.codex/config.toml`; it only detects the trust record and does not verify Codex's trust hash.
 
 ### Evidence debate workflow
 
@@ -192,9 +197,11 @@ The machine owner sets policy ceilings via environment variables; Codex chooses 
 | Owner | Default model (`opus` out of the box) | `CLAUDE_CONSULT_MODEL` |
 | Owner | Model ceiling | `CLAUDE_CONSULT_ALLOWED_MODELS` (a single value locks the model completely) |
 | Codex (within the whitelist) | Per-call model | `model` tool argument |
+| Owner | Effort ceiling | `CLAUDE_CONSULT_MAX_EFFORT` (`low`, `medium`, `high`, `xhigh`, `max`) |
+| Codex (within the ceiling) | Per-call reasoning depth | `effort` tool argument |
 | Owner only | Optional budget cap | `CLAUDE_CONSULT_MAX_BUDGET_USD` |
 
-There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Agent` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models automatically run at `--effort max`.
+There is **no write tier**. The child claude process is only ever allowed `Read`, `Glob`, `Grep` (plus `WebSearch`, `WebFetch` at the default `research` tier; plus the verified `Agent` sub-agent token only at `deep-research`). `Write`, `Edit`, `NotebookEdit`, and `Bash` can never appear in the allowlist, and permission mode is always `default`. Fable models still default to `--effort max`, but that default is silently clamped to `CLAUDE_CONSULT_MAX_EFFORT` when the owner sets a ceiling. An explicit per-call `effort` above the ceiling is rejected with the allowed levels.
 
 No budget cap is set by default because this package assumes a Claude subscription login with no marginal cost per run. Machines billed through an API key can opt into a spending guard by setting `CLAUDE_CONSULT_MAX_BUDGET_USD` or running `setup --max-budget-usd <n>`.
 
@@ -210,6 +217,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_ALLOWED_TOOLS` | per tier | Fine-grained tool list override; exact `Write`, `Edit`, `NotebookEdit`, and `Bash` tokens are rejected |
 | `CLAUDE_CONSULT_MAX_BUDGET_USD` | unlimited | Owner-level spending guard passed as `--max-budget-usd` |
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
+| `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`; unset means no ceiling |
 | `CLAUDE_CONSULT_JOURNAL_DIR` | disabled | Local absolute directory for opt-in metadata-only JSONL journal files |
 | `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |
 | `CLAUDE_CONSULT_GATE_MODEL` | `haiku` for `review-gate` | Default model for the review-gate CLI; `--model` overrides it |
@@ -248,7 +256,9 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | npx says the command is not recognized right after a release | Windows npx has a brief bin-shim race on freshly published versioned specs; use the bare package name (npx -y claude-consult-mcp) or retry after a minute |
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
 | `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
-| Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>` and inspect the log out of band |
+| `claude_gate_findings` is not listed | Set `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
+| Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>`, configure the same path for the MCP server, then call `claude_gate_findings` |
+| Doctor says the review gate hook is not trusted | Run Codex interactively once and approve the hook; doctor detects the trust record but does not verify the hash |
 | Remove review gate hook | `npx -y claude-consult-mcp setup --remove-review-gate` |
 | Uninstall | `codex mcp remove claude-consult` |
 
