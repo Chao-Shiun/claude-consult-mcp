@@ -50,7 +50,7 @@ describe("claude_continuity_status tool", () => {
     expect(text).not.toContain("[claude-consult]");
   });
 
-  it("reports no matching entries", async () => {
+  it("reports no workspace match when other candidates exist", async () => {
     const journal = journalWith({ entries: [entry(OTHER_WORKSPACE, 1)], skippedLines: 0 });
 
     expect(JSON.parse(textOf(await createContinuityStatusTool(journal, true, () => "2026-07").execute({ workspace_dir: WORKSPACE })))).toEqual({
@@ -58,7 +58,19 @@ describe("claude_continuity_status tool", () => {
       candidate_count: 1,
       matching_count: 0,
       would_inject: false,
-      reason: "no_matching_entries"
+      reason: "no_workspace_match"
+    });
+  });
+
+  it("reports no candidates when the current month is empty", async () => {
+    const journal = journalWith({ entries: [], skippedLines: 0 });
+
+    expect(JSON.parse(textOf(await createContinuityStatusTool(journal, true, () => "2026-07").execute({ workspace_dir: WORKSPACE })))).toEqual({
+      continuity_enabled: true,
+      candidate_count: 0,
+      matching_count: 0,
+      would_inject: false,
+      reason: "no_candidates"
     });
   });
 

@@ -25,7 +25,7 @@ export function createContinuityStatusTool(journal: Journal, continuityEnabled: 
         const stats = await journal.readWithStats({ month: currentMonth(), limit: CONTINUITY_READ_LIMIT });
         const matchingCount = selectContinuityEntries(stats.entries, args.workspace_dir).length;
         const wouldInject = continuityEnabled && matchingCount > 0;
-        const reason = wouldInject ? "matching_entries" : continuityEnabled ? "no_matching_entries" : "continuity_disabled";
+        const reason = !continuityEnabled ? "continuity_disabled" : matchingCount > 0 ? "matching_entries" : stats.entries.length === 0 ? "no_candidates" : "no_workspace_match";
         const text = JSON.stringify({ continuity_enabled: continuityEnabled, candidate_count: stats.entries.length, matching_count: matchingCount, would_inject: wouldInject, reason });
         return { content: [{ type: "text", text }] };
       } catch {

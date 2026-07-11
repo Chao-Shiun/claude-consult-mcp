@@ -86,7 +86,7 @@ describe("claude_review_diff tool", () => {
     expect(Buffer.byteLength(REVIEW_FINDINGS_JSON_SCHEMA, "utf8")).toBeLessThan(LIMITS.jsonSchemaMaxBytes);
     expect(schema.required).toEqual(["summary", "findings"]);
     expect(schema.properties.findings.items.required).toEqual(["severity", "file", "line", "finding", "evidence", "recommendation", "confidence"]);
-    expect(Object.keys(schema.properties.findings.items.properties)).toEqual(["severity", "file", "line", "finding", "evidence", "recommendation", "confidence"]);
+    expect(Object.keys(schema.properties.findings.items.properties)).toEqual(["severity", "file", "line", "end_line", "category", "symbol", "finding", "evidence", "recommendation", "confidence"]);
   });
 
   it("keeps prose byte-identical when structured is absent or false", async () => {
@@ -109,7 +109,7 @@ describe("claude_review_diff tool", () => {
   it("returns schema-compliant structured findings with a json footer when opted in", async () => {
     const repo = await makeRepo();
     await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
-    const findings = { summary: "one issue", findings: [{ severity: "high", file: "a.ts", line: 1, finding: "wrong value", evidence: "+export const value = 2", recommendation: "restore the expected value", confidence: 0.9 }] };
+    const findings = { summary: "one issue", findings: [{ severity: "high", file: "a.ts", line: 1, end_line: 2, category: "correctness", symbol: "value", finding: "wrong value", evidence: "+export const value = 2", recommendation: "restore the expected value", confidence: 0.9 }] };
     const envelope = { ...FIXTURE_ENVELOPE, result: JSON.stringify(findings), structuredOutput: findings, continuityInfo: { injected: true, entries: 2 } } as ClaudeEnvelope;
     const { requests, context } = makeContext(envelope);
 

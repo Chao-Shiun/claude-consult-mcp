@@ -148,7 +148,7 @@ describe("MCP protocol layer", () => {
     expect(Object.keys(reviewDiffProperties).sort()).toEqual(["base", "continuity", "depth", "effort", "model", "question", "session_id", "structured", "workspace_dir"]);
     expect(reviewDiffProperties.structured).toMatchObject({
       type: "boolean",
-      description: "Return findings as machine-readable JSON — severity, file, line, finding, evidence, recommendation, confidence — instead of prose. Best-effort: falls back to prose with a notice if the model does not comply. Omit for the prose review."
+      description: "Return findings as machine-readable JSON — severity, file, line, optional end_line/category/symbol, finding, evidence, recommendation, confidence — instead of prose. Best-effort: falls back to prose with a notice if the model does not comply. Omit for the prose review."
     });
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
     expect((properties.workspace_dir as { description?: string }).description).toContain("Pass it on fresh conversations to enable journal continuity (recent-consultation context for this workspace).");

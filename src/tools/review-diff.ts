@@ -16,6 +16,9 @@ export const REVIEW_FINDINGS_JSON_SCHEMA = JSON.stringify({
       severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
       file: { type: "string" },
       line: { anyOf: [{ type: "integer" }, { type: "null" }] },
+      end_line: { anyOf: [{ type: "integer" }, { type: "null" }], description: "The finding's last line when it spans a range." },
+      category: { type: "string", description: "A short kebab-case class such as correctness, security, performance, or style." },
+      symbol: { anyOf: [{ type: "string" }, { type: "null" }], description: "The enclosing function or class name when identifiable." },
       finding: { type: "string" },
       evidence: { type: "string" },
       recommendation: { type: "string" },
@@ -25,7 +28,7 @@ export const REVIEW_FINDINGS_JSON_SCHEMA = JSON.stringify({
   required: ["summary", "findings"]
 });
 
-const STRUCTURED_DESCRIPTION = "Return findings as machine-readable JSON — severity, file, line, finding, evidence, recommendation, confidence — instead of prose. Best-effort: falls back to prose with a notice if the model does not comply. Omit for the prose review.";
+const STRUCTURED_DESCRIPTION = "Return findings as machine-readable JSON — severity, file, line, optional end_line/category/symbol, finding, evidence, recommendation, confidence — instead of prose. Best-effort: falls back to prose with a notice if the model does not comply. Omit for the prose review.";
 
 const baseRefSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._\/~^@-]{0,127}$/);
 
