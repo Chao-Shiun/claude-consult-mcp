@@ -110,13 +110,13 @@ describe("claude_review_diff tool", () => {
     const repo = await makeRepo();
     await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
     const findings = { summary: "one issue", findings: [{ severity: "high", file: "a.ts", line: 1, finding: "wrong value", evidence: "+export const value = 2", recommendation: "restore the expected value", confidence: 0.9 }] };
-    const envelope = { ...FIXTURE_ENVELOPE, result: JSON.stringify(findings), structuredOutput: findings };
+    const envelope = { ...FIXTURE_ENVELOPE, result: JSON.stringify(findings), structuredOutput: findings, continuityInfo: { injected: true, entries: 2 } } as ClaudeEnvelope;
     const { requests, context } = makeContext(envelope);
 
     const result = await createReviewDiffTool(context).execute({ workspace_dir: repo, structured: true });
 
     expect(requests[0]?.jsonSchema).toBe(REVIEW_FINDINGS_JSON_SCHEMA);
-    expect(textOf(result)).toBe(`${JSON.stringify(findings)}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json`);
+    expect(textOf(result)).toBe(`${JSON.stringify(findings)}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json | continuity: injected(2)`);
   });
 
   it("uses the existing prose fallback when structured findings are not returned", async () => {

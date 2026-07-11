@@ -148,6 +148,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     };
     validateRunSpec(runSpec);
     let appendSystemPrompt = request.appendSystemPrompt;
+    let continuityInfo: ClaudeEnvelope["continuityInfo"];
     if (journal === undefined) {
       deps.logger.debug("continuity skipped: journal disabled");
     } else if (!deps.config.continuityEnabled) {
@@ -159,6 +160,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     } else if (request.cwd === undefined || request.continuityWorkspaceDir === undefined) {
       deps.logger.debug("continuity skipped: no workspace");
     } else {
+      continuityInfo = { injected: false, entries: 0 };
       try {
         const result = await readContinuityDigest(journal, request.continuityWorkspaceDir);
         if (result === undefined) {
@@ -167,6 +169,7 @@ export function createRunner(deps: RunnerDeps): Runner {
           deps.logger.debug("continuity skipped: no matching entries");
         } else {
           appendSystemPrompt = appendSystemPrompt === undefined ? result.digest : `${appendSystemPrompt}\n\n${result.digest}`;
+          continuityInfo = { injected: true, entries: result.count };
           deps.logger.debug(`continuity injected: ${result.count} entries`);
         }
       } catch {
@@ -221,7 +224,10 @@ export function createRunner(deps: RunnerDeps): Runner {
         removeAbortListener();
       }
     });
-    const envelope = parseClaudeOutput(raw);
+    const parsedEnvelope = parseClaudeOutput(raw);
+    const envelope = continuityInfo === undefined
+      ? parsedEnvelope
+      : Object.freeze({ ...parsedEnvelope, continuityInfo: Object.freeze(continuityInfo) });
     if (request.origin !== undefined) {
       const resultExcerpt = envelope.result.split(/\r?\n/).find((line) => line.trim() !== "");
       const excerpt = request.origin.excerptFromResult === true && resultExcerpt !== undefined ? resultExcerpt : request.origin.excerpt;

@@ -34,7 +34,12 @@ function structuredFormat(envelope: ClaudeEnvelope, options: SuccessResultOption
 export function formatFooter(envelope: ClaudeEnvelope, options?: SuccessResultOptions): string {
   const base = `${FOOTER_PREFIX} session_id: ${envelope.sessionId} | cost_usd: ${formatMetric(envelope.totalCostUsd)} | duration_ms: ${formatMetric(envelope.durationMs)} | turns: ${formatMetric(envelope.numTurns)}`;
   const format = structuredFormat(envelope, options);
-  return format === undefined ? base : `${base} | format: ${format}`;
+  const formatted = format === undefined ? base : `${base} | format: ${format}`;
+  if (envelope.continuityInfo === undefined) {
+    return formatted;
+  }
+  const continuity = envelope.continuityInfo.injected ? `injected(${envelope.continuityInfo.entries})` : "none";
+  return `${formatted} | continuity: ${continuity}`;
 }
 
 export function toSuccessResult(envelope: ClaudeEnvelope, options?: SuccessResultOptions): ToolResult {

@@ -18,6 +18,8 @@ export interface ClaudeEnvelope {
   readonly totalCostUsd: number | undefined;
   readonly durationMs: number | undefined;
   readonly numTurns: number | undefined;
+  // Set by the runner after parsing; never sourced from Claude output.
+  readonly continuityInfo?: { readonly injected: boolean; readonly entries: number } | undefined;
 }
 
 const nullableNumberSchema = z.number().nullish();

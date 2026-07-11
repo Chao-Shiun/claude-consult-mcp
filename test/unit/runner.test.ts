@@ -4,7 +4,7 @@ import { CAPABILITY_TOOLS, LIMITS, SUBAGENT_TOOL_TOKEN } from "../../src/constan
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
 import { createLogger } from "../../src/logger.js";
 import { createDefaultRunner, createRunner, type RunnerDeps, type RunnerRequest } from "../../src/claude/runner.js";
-import type { RawRunOutput, } from "../../src/claude/parse-output.js";
+import type { ClaudeEnvelope, RawRunOutput } from "../../src/claude/parse-output.js";
 import type { SpawnClaudeRequest } from "../../src/claude/spawn-claude.js";
 import { createSessionLedger } from "../../src/session-ledger.js";
 import type { Journal, JournalEntry } from "../../src/journal.js";
@@ -449,6 +449,41 @@ describe("createRunner", () => {
     await runner.run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
 
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toMatch(/^<recent-consultations>/);
+  });
+
+  it("attaches an injected continuity outcome only after an eligible read", async () => {
+    const journal: Journal = { append: async () => undefined, read: async () => [continuityEntry(1), continuityEntry(2)] };
+    const harness = makeHarness();
+
+    const result = await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
+
+    expect((result as ClaudeEnvelope & { continuityInfo?: unknown }).continuityInfo).toEqual({ injected: true, entries: 2 });
+  });
+
+  it("attaches a none outcome when an eligible read has no matching entries", async () => {
+    const journal: Journal = { append: async () => undefined, read: async () => [continuityEntry(1, OTHER_WORKSPACE)] };
+    const harness = makeHarness();
+
+    const result = await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
+
+    expect((result as ClaudeEnvelope & { continuityInfo?: unknown }).continuityInfo).toEqual({ injected: false, entries: 0 });
+  });
+
+  it("omits continuity metadata from ineligible runs", async () => {
+    const journal: Journal = { append: async () => undefined, read: async () => [continuityEntry(1)] };
+    const cases: ReadonlyArray<{ env?: Record<string, string>; journal?: Journal; request: RunnerRequest }> = [
+      { request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE } },
+      { journal, request: { prompt: "resume", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, sessionId: SESSION_ID } },
+      { journal, request: { prompt: "clean", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, skipContinuity: true } },
+      { journal, request: { prompt: "no workspace" } },
+      { env: { CLAUDE_CONSULT_CONTINUITY: "0" }, journal, request: { prompt: "disabled", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE } }
+    ];
+
+    for (const testCase of cases) {
+      const harness = makeHarness(testCase.env);
+      const result = await createRunner({ ...harness.deps, journal: testCase.journal }).run(testCase.request);
+      expect(Object.hasOwn(result, "continuityInfo")).toBe(false);
+    }
   });
 
   it("skips continuity for a fresh matching run when the caller opts out", async () => {

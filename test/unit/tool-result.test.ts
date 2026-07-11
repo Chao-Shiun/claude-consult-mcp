@@ -44,6 +44,22 @@ describe("toSuccessResult", () => {
     expect(result.content[0]?.text).toBe(`{"answer":"ok"}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json`);
   });
 
+  it("appends injected continuity metadata as the last footer segment", () => {
+    const result = toSuccessResult({ ...envelope(), continuityInfo: { injected: true, entries: 2 } } as ClaudeEnvelope);
+    expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | continuity: injected(2)`);
+  });
+
+  it("appends continuity none only when an eligible outcome is present", () => {
+    const result = toSuccessResult({ ...envelope(), continuityInfo: { injected: false, entries: 0 } } as ClaudeEnvelope);
+    expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | continuity: none`);
+    expect(toSuccessResult(envelope()).content[0]?.text).not.toContain("continuity:");
+  });
+
+  it("keeps format before continuity when both footer segments are present", () => {
+    const result = toSuccessResult({ ...envelope({ result: '{"answer":"ok"}', structuredOutput: { answer: "ok" } }), continuityInfo: { injected: true, entries: 1 } } as ClaudeEnvelope, { structuredExpected: true });
+    expect(result.content[0]?.text).toBe(`{"answer":"ok"}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json | continuity: injected(1)`);
+  });
+
   it("marks prose schema fallbacks and wraps the answer with the exact notice", () => {
     const result = toSuccessResult(envelope({ result: "plain answer" }), { structuredExpected: true });
     expect(result.content[0]?.text).toBe(`${STRUCTURED_NOTICE}\n\n<prose-answer>\nplain answer\n</prose-answer>\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: prose`);
