@@ -121,7 +121,17 @@ Run `doctor` inside the project directory to report continuity status and counts
 
 Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.
 
-`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`. It predicts journal readiness for a fresh consultation; resumed sessions and `continuity: false` still suppress the digest. It is available only when the journal is enabled and is the machine-readable counterpart to the count-only `doctor` diagnostics.
+`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`. It is available only when the journal is enabled and is the machine-readable counterpart to the count-only `doctor` diagnostics.
+
+| Reason | Meaning |
+|---|---|
+| `matching_entries` | Continuity is enabled and matching workspace entries exist |
+| `continuity_disabled` | The owner disabled continuity |
+| `no_candidates` | The current month has no valid journal entries |
+| `no_workspace_match` | Current-month entries exist, but none match the workspace |
+| `journal_unreadable` | The journal could not be read; counts fail soft to zero |
+
+`would_inject` reports the workspace/machine state a caller cannot know; per-call factors that suppress the digest (resuming a session, `continuity: false`) are the caller's own choices and are not predicted by this tool.
 
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
@@ -129,7 +139,7 @@ Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason 
 
 `claude_second_opinion`, `claude_debate_open`, and `claude_debate_reply` request structured output, but Claude's schema compliance is model-dependent best-effort. Check the footer `format` field before parsing; `format: prose` means Claude answered directly and the body is wrapped for reading instead of JSON parsing:
 
-Pass `structured: true` to `claude_review_diff` to request machine-readable findings with `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.
+Pass `structured: true` to `claude_review_diff` to request machine-readable findings with required `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields, plus optional `end_line`, `category`, and `symbol` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.
 
 ```ts
 const text = result.content[0].text;
@@ -280,6 +290,7 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | Desktop app does not show the tools | Restart the Codex desktop app after changing `~/.codex/config.toml` |
 | MCP tool calls fail with user cancelled MCP tool call | Codex 0.144+ requires approval for tools not marked read-only; upgrade claude-consult-mcp to >= 0.9.0 (all tools declare the read-only annotation), or set default_tools_approval_mode = "approve" under [mcp_servers.claude-consult] in ~/.codex/config.toml |
 | `claude_consult_history` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
+| `claude_continuity_status` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | `claude_gate_findings` is not listed | Set `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>`, configure the same path for the MCP server, then call `claude_gate_findings` |
 | Doctor says the review gate hook is not trusted | Run Codex interactively once and approve the hook; doctor detects the trust record but does not verify the hash |

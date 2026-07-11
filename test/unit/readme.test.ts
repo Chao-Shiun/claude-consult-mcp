@@ -29,9 +29,15 @@ describe("README release notes", () => {
     expect(README).toContain("For clean-context fresh runs, pass `continuity: false`; this can only disable continuity and cannot enable it against the owner's `CLAUDE_CONSULT_CONTINUITY=0` switch.");
     expect(README).toContain("Run `doctor` inside the project directory to report continuity status and counts for that workspace; it never prints journal content.");
     expect(README).toContain("Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.");
-    expect(README).toContain("`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`. It predicts journal readiness for a fresh consultation; resumed sessions and `continuity: false` still suppress the digest.");
+    expect(README).toContain("`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`.");
+    expect(README).toContain("| `matching_entries` | Continuity is enabled and matching workspace entries exist |");
+    expect(README).toContain("| `continuity_disabled` | The owner disabled continuity |");
+    expect(README).toContain("| `no_candidates` | The current month has no valid journal entries |");
+    expect(README).toContain("| `no_workspace_match` | Current-month entries exist, but none match the workspace |");
+    expect(README).toContain("| `journal_unreadable` | The journal could not be read; counts fail soft to zero |");
+    expect(README).toContain("`would_inject` reports the workspace/machine state a caller cannot know; per-call factors that suppress the digest (resuming a session, `continuity: false`) are the caller's own choices and are not predicted by this tool.");
     expect(README).toContain("It is available only when the journal is enabled and is the machine-readable counterpart to the count-only `doctor` diagnostics.");
-    expect(README).toContain("Pass `structured: true` to `claude_review_diff` to request machine-readable findings with `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.");
+    expect(README).toContain("Pass `structured: true` to `claude_review_diff` to request machine-readable findings with required `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields, plus optional `end_line`, `category`, and `symbol` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.");
     expect(README).toContain("Eligible fresh runs append `| continuity: injected(N)` or `| continuity: none` as the final footer segment, after an optional `| format:` segment.");
     expect(README).toContain("Journal-off, owner-disabled, resumed, no-workspace, and `continuity: false` runs omit the continuity segment entirely.");
     expect(README).toContain("The user prompt travels via stdin and never appears on the command line");
@@ -53,6 +59,7 @@ describe("README release notes", () => {
     expect(README).toContain("an unchanged diff is skipped even when the claim changes; use `--force` to override");
     expect(README).toContain("doctor reports `[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire`");
     expect(README).toContain("| Continuity digest never appears | Run doctor inside that project directory - it reports whether the journal, kill switch, current-month entries, and workspace match line up; pass workspace_dir on the tool call and check CLAUDE_CONSULT_CONTINUITY |");
+    expect(README).toContain("| `claude_continuity_status` is not listed | Set `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |");
     expect(README).toContain("| `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |");
     expect(README).toContain("| `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`");
     expect(README).toContain("| `CLAUDE_CONSULT_CONTINUITY` | enabled when the journal is on | Set to `0` to disable recent-consultation context for fresh advisor runs |");
