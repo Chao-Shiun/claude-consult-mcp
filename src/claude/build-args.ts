@@ -94,39 +94,22 @@ function validateJsonSchema(jsonSchema: string): void {
   }
 }
 
-export function buildClaudeArgs(spec: RunSpec): readonly string[] {
+export function validateRunSpec(spec: RunSpec): void {
   validateTools(spec.allowedTools);
-  const args: string[] = ["-p", "--output-format", "json", "--permission-mode", "default", "--allowedTools", spec.allowedTools.join(","), "--strict-mcp-config"];
-  if (spec.model !== undefined) {
-    if (!PATTERNS.model.test(spec.model)) {
-      invalid(`model "${spec.model}" does not match the safe model pattern`, "use an alias like opus/sonnet/haiku or a full model id");
-    }
-    args.push("--model", spec.model);
+  if (spec.model !== undefined && !PATTERNS.model.test(spec.model)) {
+    invalid(`model "${spec.model}" does not match the safe model pattern`, "use an alias like opus/sonnet/haiku or a full model id");
   }
-  if (spec.effort !== undefined) {
-    if (!(EFFORT_LEVELS as readonly string[]).includes(spec.effort)) {
-      invalid(`effort "${spec.effort}" is not one of ${EFFORT_LEVELS.join(", ")}`, "use low, medium, high, xhigh, or max");
-    }
-    args.push("--effort", spec.effort);
+  if (spec.effort !== undefined && !(EFFORT_LEVELS as readonly string[]).includes(spec.effort)) {
+    invalid(`effort "${spec.effort}" is not one of ${EFFORT_LEVELS.join(", ")}`, "use low, medium, high, xhigh, or max");
   }
-  if (spec.sessionId !== undefined) {
-    if (!PATTERNS.sessionId.test(spec.sessionId)) {
-      invalid(`session id "${spec.sessionId}" is not a UUID`, "pass the session_id exactly as printed in a previous result footer");
-    }
-    args.push("-r", spec.sessionId);
-  }
-  if (spec.appendSystemPrompt !== undefined) {
-    args.push("--append-system-prompt", spec.appendSystemPrompt);
+  if (spec.sessionId !== undefined && !PATTERNS.sessionId.test(spec.sessionId)) {
+    invalid(`session id "${spec.sessionId}" is not a UUID`, "pass the session_id exactly as printed in a previous result footer");
   }
   if (spec.jsonSchema !== undefined) {
     validateJsonSchema(spec.jsonSchema);
-    args.push("--json-schema", spec.jsonSchema);
   }
-  if (spec.budgetUsd !== undefined) {
-    if (!Number.isFinite(spec.budgetUsd) || spec.budgetUsd <= 0) {
-      invalid(`budget must be a positive number, got ${spec.budgetUsd}`, `set ${ENV.maxBudgetUsd} to a positive number or unset it`);
-    }
-    args.push("--max-budget-usd", String(spec.budgetUsd));
+  if (spec.budgetUsd !== undefined && (!Number.isFinite(spec.budgetUsd) || spec.budgetUsd <= 0)) {
+    invalid(`budget must be a positive number, got ${spec.budgetUsd}`, `set ${ENV.maxBudgetUsd} to a positive number or unset it`);
   }
   for (const dir of spec.addDirs) {
     if (!path.isAbsolute(dir)) {
@@ -135,6 +118,31 @@ export function buildClaudeArgs(spec: RunSpec): readonly string[] {
     if (PATTERNS.uncOrDevice.test(dir)) {
       invalid(`add-dir path must not be a UNC or device path, got "${dir}"`, "pass a local absolute path such as C:\\project or /home/user/project");
     }
+  }
+}
+
+export function buildClaudeArgs(spec: RunSpec): readonly string[] {
+  validateRunSpec(spec);
+  const args: string[] = ["-p", "--output-format", "json", "--permission-mode", "default", "--allowedTools", spec.allowedTools.join(","), "--strict-mcp-config"];
+  if (spec.model !== undefined) {
+    args.push("--model", spec.model);
+  }
+  if (spec.effort !== undefined) {
+    args.push("--effort", spec.effort);
+  }
+  if (spec.sessionId !== undefined) {
+    args.push("-r", spec.sessionId);
+  }
+  if (spec.appendSystemPrompt !== undefined) {
+    args.push("--append-system-prompt", spec.appendSystemPrompt);
+  }
+  if (spec.jsonSchema !== undefined) {
+    args.push("--json-schema", spec.jsonSchema);
+  }
+  if (spec.budgetUsd !== undefined) {
+    args.push("--max-budget-usd", String(spec.budgetUsd));
+  }
+  for (const dir of spec.addDirs) {
     args.push("--add-dir", dir);
   }
   return Object.freeze(args);

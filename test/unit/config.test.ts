@@ -32,6 +32,7 @@ describe("loadConfig", () => {
     expect(config.maxThinkingTokens).toBeUndefined();
     expect(config.maxEffort).toBeUndefined();
     expect(config.journalDir).toBeUndefined();
+    expect(config.continuityEnabled).toBe(true);
     expect(config.maxConcurrency).toBe(2);
     expect(config.logLevel).toBe("info");
     expect(Object.isFrozen(config)).toBe(true);
@@ -49,6 +50,7 @@ describe("loadConfig", () => {
       CLAUDE_CONSULT_MAX_THINKING_TOKENS: "10000",
       CLAUDE_CONSULT_MAX_EFFORT: "high",
       CLAUDE_CONSULT_JOURNAL_DIR: ABSOLUTE_JOURNAL_DIR,
+      CLAUDE_CONSULT_CONTINUITY: "0",
       CLAUDE_CONSULT_MAX_CONCURRENCY: "4",
       CLAUDE_CONSULT_LOG_LEVEL: "debug"
     });
@@ -62,6 +64,7 @@ describe("loadConfig", () => {
     expect(config.maxThinkingTokens).toBe(10_000);
     expect(config.maxEffort).toBe("high");
     expect(config.journalDir).toBe(ABSOLUTE_JOURNAL_DIR);
+    expect(config.continuityEnabled).toBe(false);
     expect(config.maxConcurrency).toBe(4);
     expect(config.logLevel).toBe("debug");
   });
@@ -149,6 +152,17 @@ describe("loadConfig", () => {
   it("rejects relative or UNC journal directories", () => {
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_JOURNAL_DIR: "relative\\journal" }), "CLAUDE_CONSULT_JOURNAL_DIR");
     expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_JOURNAL_DIR: UNC_JOURNAL_DIR }), "CLAUDE_CONSULT_JOURNAL_DIR");
+  });
+
+  it("accepts the continuity kill switch values and enables continuity by default", () => {
+    expect(loadConfig({}).continuityEnabled).toBe(true);
+    expect(loadConfig({ CLAUDE_CONSULT_CONTINUITY: "1" }).continuityEnabled).toBe(true);
+    expect(loadConfig({ CLAUDE_CONSULT_CONTINUITY: "0" }).continuityEnabled).toBe(false);
+  });
+
+  it("rejects unknown continuity values with the allowed list", () => {
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_CONTINUITY: "yes" }), "CLAUDE_CONSULT_CONTINUITY");
+    expectInvalidInput(() => loadConfig({ CLAUDE_CONSULT_CONTINUITY: "yes" }), "0, 1");
   });
 
   it("rejects unknown log levels and invalid default models", () => {

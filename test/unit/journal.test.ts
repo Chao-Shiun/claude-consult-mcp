@@ -68,17 +68,20 @@ describe("createJournal", () => {
     expect(await readFile(path.join(dir, "consult-journal-2026-03.jsonl"), "utf8")).toContain(SESSION_C);
     expect((await journal.read({ limit: 2 })).map((entry) => entry.sessionId)).toEqual([SESSION_C, SESSION_B]);
     expect((await journal.read({ workspaceDir: dir })).map((entry) => entry.sessionId)).toEqual([SESSION_C, SESSION_A]);
+    expect((await journal.read({ month: "2026-03" })).map((entry) => entry.sessionId)).toEqual([SESSION_C, SESSION_B]);
   });
 
-  it("skips corrupt lines with a debug log", async () => {
+  it("skips malformed entries normally and rejects them for strict reads", async () => {
     const dir = await tempDir();
     const logs = logger();
     const journal = createJournal(dir, logs.logger, () => new Date("2026-03-10T00:00:00.000Z"));
     await journal.append({ ts: "2026-03-10T00:00:00.000Z", tool: "ask_claude", sessionId: SESSION_A, workspaceDir: dir, model: undefined, excerpt: "a", costUsd: undefined, durationMs: undefined });
-    await writeFile(path.join(dir, "consult-journal-2026-03.jsonl"), "not json\n", { flag: "a" });
+    const malformed = { ts: "2026-03-10T00:01:00.000Z", tool: 42, sessionId: SESSION_B, workspaceDir: dir, model: undefined, excerpt: "bad", costUsd: undefined, durationMs: undefined };
+    await writeFile(path.join(dir, "consult-journal-2026-03.jsonl"), `not json\n${JSON.stringify(malformed)}\n`, { flag: "a" });
 
     expect((await journal.read()).map((entry) => entry.sessionId)).toEqual([SESSION_A]);
     expect(logs.debug.join("\n")).toContain("skipping corrupt journal line");
+    await expect(journal.read({ strict: true })).rejects.toThrow();
   });
 
   it("swallows append failures and logs an error", async () => {

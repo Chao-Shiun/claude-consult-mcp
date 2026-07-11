@@ -13,6 +13,7 @@ export interface Config {
   readonly maxThinkingTokens: number | undefined;
   readonly maxEffort: Effort | undefined;
   readonly journalDir: string | undefined;
+  readonly continuityEnabled: boolean;
   readonly maxConcurrency: number;
   readonly logLevel: LogLevel;
 }
@@ -163,6 +164,7 @@ export function loadConfig(env: Env = process.env): Config {
     maxThinkingTokens: parsePositiveInt(env, ENV.maxThinkingTokens),
     maxEffort: parseOptionalChoice(env, ENV.maxEffort, EFFORT_LEVELS),
     journalDir: parseJournalDir(env),
+    continuityEnabled: parseOptionalChoice(env, ENV.continuity, ["0", "1"] as const) !== "0",
     maxConcurrency: parseBoundedInt(env, ENV.maxConcurrency, LIMITS.concurrencyMin, LIMITS.concurrencyMax, DEFAULTS.maxConcurrency),
     logLevel: parseChoice(env, ENV.logLevel, LOG_LEVELS, DEFAULTS.logLevel)
   });

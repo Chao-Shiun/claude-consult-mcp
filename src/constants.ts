@@ -34,6 +34,7 @@ export const ENV = deepFreeze({
   maxThinkingTokens: "CLAUDE_CONSULT_MAX_THINKING_TOKENS",
   maxEffort: "CLAUDE_CONSULT_MAX_EFFORT",
   journalDir: "CLAUDE_CONSULT_JOURNAL_DIR",
+  continuity: "CLAUDE_CONSULT_CONTINUITY",
   gateLog: "CLAUDE_CONSULT_GATE_LOG",
   gateModel: "CLAUDE_CONSULT_GATE_MODEL",
   maxConcurrency: "CLAUDE_CONSULT_MAX_CONCURRENCY",
@@ -76,7 +77,8 @@ export const LIMITS = deepFreeze({
   gateFindingsEntryBytes: 8 * 1024,
   gateStdinMaxBytes: 256 * 1024,
   gateStdinTimeoutMs: 1000,
-  gateClaimMaxBytes: 4 * 1024
+  gateClaimMaxBytes: 4 * 1024,
+  continuityEntries: 5
 });
 
 export const CAPABILITY_TOOLS: Readonly<Record<Capability, readonly string[]>> = deepFreeze({

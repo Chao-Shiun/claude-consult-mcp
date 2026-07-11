@@ -14,9 +14,16 @@ export interface JournalEntry {
   readonly durationMs: number | undefined;
 }
 
+interface JournalReadFilter {
+  readonly workspaceDir?: string;
+  readonly limit?: number;
+  readonly month?: string;
+  readonly strict?: boolean;
+}
+
 export interface Journal {
   readonly append: (entry: JournalEntry) => Promise<void>;
-  readonly read: (filter?: { readonly workspaceDir?: string; readonly limit?: number }) => Promise<readonly JournalEntry[]>;
+  readonly read: (filter?: JournalReadFilter) => Promise<readonly JournalEntry[]>;
 }
 
 function monthFileName(date: Date): string {
@@ -29,6 +36,29 @@ function clampLimit(limit: number | undefined): number {
 
 function freezeEntry(entry: JournalEntry): JournalEntry {
   return Object.freeze({ ...entry, excerpt: normalizeExcerpt(entry.excerpt) });
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+}
+
+export function isJournalEntry(value: unknown): value is JournalEntry {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const entry = value as Record<string, unknown>;
+  return typeof entry.ts === "string"
+    && typeof entry.tool === "string"
+    && typeof entry.sessionId === "string"
+    && isOptionalString(entry.workspaceDir)
+    && isOptionalString(entry.model)
+    && typeof entry.excerpt === "string"
+    && isOptionalNumber(entry.costUsd)
+    && isOptionalNumber(entry.durationMs);
 }
 
 function isJournalFile(name: string): boolean {
@@ -45,11 +75,14 @@ export function createJournal(dir: string, logger: Logger, now: () => Date = () 
     }
   };
 
-  const read = async (filter?: { readonly workspaceDir?: string; readonly limit?: number }): Promise<readonly JournalEntry[]> => {
+  const read = async (filter?: JournalReadFilter): Promise<readonly JournalEntry[]> => {
     const limit = clampLimit(filter?.limit);
     let names: string[];
     try {
-      names = (await readdir(dir)).filter(isJournalFile).sort().reverse();
+      names = (await readdir(dir))
+        .filter((name) => isJournalFile(name) && (filter?.month === undefined || name === `consult-journal-${filter.month}.jsonl`))
+        .sort()
+        .reverse();
     } catch {
       return Object.freeze([]);
     }
@@ -65,11 +98,18 @@ export function createJournal(dir: string, logger: Logger, now: () => Date = () 
           continue;
         }
         try {
-          const entry = freezeEntry(JSON.parse(line) as JournalEntry);
+          const parsed: unknown = JSON.parse(line);
+          if (!isJournalEntry(parsed)) {
+            throw new TypeError("invalid journal entry shape");
+          }
+          const entry = freezeEntry(parsed);
           if (filter?.workspaceDir === undefined || entry.workspaceDir === filter.workspaceDir) {
             entries.push(entry);
           }
         } catch (error) {
+          if (filter?.strict === true) {
+            throw error;
+          }
           logger.debug(`skipping corrupt journal line in ${name}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }

@@ -24,6 +24,7 @@ describe("constants", () => {
       maxThinkingTokens: "CLAUDE_CONSULT_MAX_THINKING_TOKENS",
       maxEffort: "CLAUDE_CONSULT_MAX_EFFORT",
       journalDir: "CLAUDE_CONSULT_JOURNAL_DIR",
+      continuity: "CLAUDE_CONSULT_CONTINUITY",
       gateLog: "CLAUDE_CONSULT_GATE_LOG",
       gateModel: "CLAUDE_CONSULT_GATE_MODEL",
       maxConcurrency: "CLAUDE_CONSULT_MAX_CONCURRENCY",
@@ -56,6 +57,7 @@ describe("constants", () => {
     expect(LIMITS.gateStdinMaxBytes).toBe(256 * 1024);
     expect(LIMITS.gateStdinTimeoutMs).toBe(1000);
     expect(LIMITS.gateClaimMaxBytes).toBe(4 * 1024);
+    expect(LIMITS.continuityEntries).toBe(5);
   });
 
   it("defines exactly three capability tiers without any write-capable tool", () => {

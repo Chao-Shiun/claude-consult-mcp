@@ -6,7 +6,8 @@ import { createJournal, type Journal } from "../journal.js";
 import type { Logger } from "../logger.js";
 import { createSemaphore } from "../semaphore.js";
 import { createSessionLedger, type SessionLedger } from "../session-ledger.js";
-import { buildClaudeArgs, resolveRunPolicy } from "./build-args.js";
+import { buildClaudeArgs, resolveRunPolicy, validateRunSpec } from "./build-args.js";
+import { composeContinuityDigest } from "./continuity.js";
 import { createDefaultClaudeLocator } from "./locate.js";
 import { parseClaudeOutput, type ClaudeEnvelope, type RawRunOutput } from "./parse-output.js";
 import { createDefaultSpawnDeps, spawnClaude, type SpawnClaudeRequest } from "./spawn-claude.js";
@@ -56,6 +57,7 @@ function validatePrompt(prompt: string): void {
 }
 
 const DEEP_RESEARCH_GUIDANCE = "You may delegate read-only exploration to sub-agents to cover large scopes, then synthesize their findings yourself.";
+const CONTINUITY_READ_TIMEOUT_MS = 100;
 
 function resolveAllowedTools(config: Config, depth: RunnerRequest["depth"]): readonly string[] {
   if (depth === "deep" && config.capability !== "deep-research") {
@@ -84,6 +86,24 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
   }
 }
 
+async function readContinuityDigest(journal: Journal, workspaceDir: string): Promise<string | undefined> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const entries = await Promise.race([
+      journal.read({ limit: 20, month: new Date().toISOString().slice(0, 7), strict: true }),
+      new Promise<undefined>((resolve) => {
+        timeout = setTimeout(() => resolve(undefined), CONTINUITY_READ_TIMEOUT_MS);
+        timeout.unref();
+      })
+    ]);
+    return entries === undefined ? undefined : composeContinuityDigest(entries, workspaceDir);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export function createRunner(deps: RunnerDeps): Runner {
   const semaphore = createSemaphore(deps.config.maxConcurrency);
   const inFlight = new Set<() => void>();
@@ -103,7 +123,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     validatePrompt(prompt);
     const allowedTools = resolveAllowedTools(deps.config, request.depth);
     const policy = resolveRunPolicy(deps.config, { model: request.model, effort: request.effort });
-    const args = buildClaudeArgs({
+    const runSpec = {
       allowedTools,
       model: policy.model,
       effort: policy.effort,
@@ -112,6 +132,22 @@ export function createRunner(deps: RunnerDeps): Runner {
       jsonSchema: request.jsonSchema,
       budgetUsd: policy.budgetUsd,
       addDirs: request.addDirs ?? []
+    };
+    validateRunSpec(runSpec);
+    let appendSystemPrompt = request.appendSystemPrompt;
+    if (journal !== undefined && deps.config.continuityEnabled && request.sessionId === undefined && request.cwd !== undefined) {
+      try {
+        const digest = await readContinuityDigest(journal, request.cwd);
+        if (digest !== undefined) {
+          appendSystemPrompt = appendSystemPrompt === undefined ? digest : `${appendSystemPrompt}\n\n${digest}`;
+        }
+      } catch {
+        // Continuity is optional background; every read or parse failure is a no-op.
+      }
+    }
+    const args = buildClaudeArgs({
+      ...runSpec,
+      appendSystemPrompt,
     });
     const binPath = await deps.locate();
     const env = deps.config.maxThinkingTokens === undefined

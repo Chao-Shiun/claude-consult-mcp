@@ -13,6 +13,8 @@ import { VERDICT_JSON_SCHEMA } from "../../src/tools/second-opinion.js";
 const silentLogger = createLogger("silent", { write: () => true });
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 const ABSOLUTE_JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tmp/journal";
+const WORKSPACE = process.platform === "win32" ? "C:\\repo\\project" : "/tmp/repo/project";
+const OTHER_WORKSPACE = process.platform === "win32" ? "C:\\repo\\other" : "/tmp/repo/other";
 
 const effortArgCases: Array<{
   readonly name: string;
@@ -72,6 +74,24 @@ function flush(): Promise<void> {
 function effortArg(args: readonly string[]): string | undefined {
   const index = args.indexOf("--effort");
   return index === -1 ? undefined : args[index + 1];
+}
+
+function argValue(args: readonly string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index === -1 ? undefined : args[index + 1];
+}
+
+function continuityEntry(index: number, workspaceDir: string | undefined = WORKSPACE): JournalEntry {
+  return {
+    ts: `2026-07-11T00:0${index}:00.000Z`,
+    tool: "ask_claude",
+    sessionId: `123e4567-e89b-12d3-a456-42661417400${index}`,
+    workspaceDir,
+    model: index % 2 === 0 ? "haiku" : undefined,
+    excerpt: `topic ${index}`,
+    costUsd: undefined,
+    durationMs: undefined
+  };
 }
 
 function makeHarness(env: Record<string, string> = {}, spawnImpl?: RunnerDeps["spawnImpl"]): Harness {
@@ -391,6 +411,124 @@ describe("createRunner", () => {
       costUsd: 0.01,
       durationMs: 1200
     }]);
+  });
+
+  it("appends a matching newest-first digest to the system prompt without changing the user prompt", async () => {
+    const read = vi.fn(async () => [continuityEntry(1), continuityEntry(6), continuityEntry(3), continuityEntry(5), continuityEntry(0), continuityEntry(4), continuityEntry(2), continuityEntry(7, OTHER_WORKSPACE)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+
+    await runner.run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing system prompt" });
+
+    const spawn = harness.spawnRequests[0];
+    const systemPrompt = argValue(spawn?.args ?? [], "--append-system-prompt");
+    expect(spawn?.prompt).toBe("user payload");
+    expect(systemPrompt).toMatch(/^existing system prompt\n\n<recent-consultations>/);
+    expect(systemPrompt).toContain("topic 6");
+    expect(systemPrompt).toContain("topic 2");
+    expect(systemPrompt).not.toContain("topic 1");
+    expect(systemPrompt).not.toContain("topic 7");
+    expect(systemPrompt?.indexOf("topic 6")).toBeLessThan(systemPrompt?.indexOf("topic 5") ?? -1);
+    expect(read).toHaveBeenCalledWith({ limit: 20, month: new Date().toISOString().slice(0, 7), strict: true });
+  });
+
+  it("uses the digest as the whole system prompt when the request has no existing system prompt", async () => {
+    const journal: Journal = { append: async () => undefined, read: async () => [continuityEntry(1)] };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+
+    await runner.run({ prompt: "fresh", cwd: WORKSPACE });
+
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toMatch(/^<recent-consultations>/);
+  });
+
+  it("does not read or inject continuity into resumed conversations", async () => {
+    const read = vi.fn(async () => [continuityEntry(1)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+
+    await runner.run({ prompt: "resume", cwd: WORKSPACE, sessionId: SESSION_ID, appendSystemPrompt: "existing" });
+
+    expect(read).not.toHaveBeenCalled();
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("does not read continuity when the journal or explicit cwd is absent", async () => {
+    const withoutJournal = makeHarness();
+    await createRunner(withoutJournal.deps).run({ prompt: "fresh", cwd: WORKSPACE });
+    expect(argValue(withoutJournal.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
+
+    const read = vi.fn(async () => [continuityEntry(1)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const withoutCwd = makeHarness();
+    await createRunner({ ...withoutCwd.deps, journal }).run({ prompt: "fresh" });
+    expect(read).not.toHaveBeenCalled();
+    expect(argValue(withoutCwd.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
+  });
+
+  it("does not read continuity when the kill switch is disabled", async () => {
+    const read = vi.fn(async () => [continuityEntry(1)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const harness = makeHarness({ CLAUDE_CONSULT_CONTINUITY: "0" });
+
+    await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+
+    expect(read).not.toHaveBeenCalled();
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("falls back to the original prompt and still spawns when continuity reading fails", async () => {
+    const journal: Journal = { append: async () => undefined, read: async () => { throw new Error("disk unavailable"); } };
+    const harness = makeHarness();
+
+    await expect(createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" })).resolves.toMatchObject({ sessionId: SESSION_ID });
+
+    expect(harness.spawnRequests).toHaveLength(1);
+    expect(harness.spawnRequests[0]?.prompt).toBe("user payload");
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("falls back to the original prompt when a malformed journal entry cannot be composed", async () => {
+    const malformed = { ...continuityEntry(1), tool: 42 as unknown as string };
+    const journal: Journal = { append: async () => undefined, read: async () => [malformed] };
+    const harness = makeHarness();
+
+    await createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+
+    expect(harness.spawnRequests).toHaveLength(1);
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("stops waiting for a stalled continuity read and still spawns", async () => {
+    vi.useFakeTimers();
+    try {
+      const journal: Journal = { append: async () => undefined, read: async () => new Promise<readonly JournalEntry[]>(() => undefined) };
+      const harness = makeHarness();
+      const pending = createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+
+      await vi.runAllTimersAsync();
+
+      expect(harness.spawnRequests).toHaveLength(1);
+      await expect(pending).resolves.toMatchObject({ sessionId: SESSION_ID });
+      expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("validates depth, schema, and add-dir inputs before reading continuity", async () => {
+    const read = vi.fn(async () => [continuityEntry(1)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const harness = makeHarness();
+    const runner = createRunner({ ...harness.deps, journal });
+
+    await expectCode(runner.run({ prompt: "deep", cwd: WORKSPACE, depth: "deep" }), "INVALID_INPUT");
+    await expectCode(runner.run({ prompt: "schema", cwd: WORKSPACE, jsonSchema: "not json" }), "INVALID_INPUT");
+    await expectCode(runner.run({ prompt: "directory", cwd: WORKSPACE, addDirs: ["relative"] }), "INVALID_INPUT");
+
+    expect(read).not.toHaveBeenCalled();
   });
 
   it("uses the first non-empty result line for the origin excerpt when requested", async () => {
