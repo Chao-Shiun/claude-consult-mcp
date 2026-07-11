@@ -103,6 +103,30 @@ Successful single-run results that actually ran Claude end with a machine-readab
 
 Eligible fresh runs append `| continuity: injected(N)` or `| continuity: none` as the final footer segment, after an optional `| format:` segment. Journal-off, owner-disabled, resumed, no-workspace, and `continuity: false` runs omit the continuity segment entirely.
 
+### Machine-readable results
+
+Successful single-run Claude-backed results carry this server-derived envelope in MCP `structuredContent`:
+
+```json
+{
+  "format": "json",
+  "data": { "answer": "..." },
+  "meta": {
+    "session_id": "123e4567-e89b-12d3-a456-426614174000",
+    "cost_usd": 0.12,
+    "duration_ms": 3400,
+    "turns": 2,
+    "continuity": { "injected": true, "entries": 2 }
+  }
+}
+```
+
+`data` is present only when `format` is `json`; prose results use `format: "prose"` and omit `data`. Missing numeric metadata is `null`, and continuity-ineligible runs use `continuity: null`.
+
+Read `structured_content` when present. The existing text body and footer are byte-compatible fallbacks and remain unchanged. Error results carry text only. `claude_panel` remains text-only because it aggregates multiple runs, and the list-shaped spawn-free tools remain text-only in this release.
+
+`claude_continuity_status` instead mirrors its existing compact JSON object directly as `structured_content`, without execution metadata.
+
 Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
 
 ### Consultation journal
@@ -137,7 +161,7 @@ Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason 
 
 ### Gate your actions on Claude's verdict
 
-`claude_second_opinion`, `claude_debate_open`, and `claude_debate_reply` request structured output, but Claude's schema compliance is model-dependent best-effort. Check the footer `format` field before parsing; `format: prose` means Claude answered directly and the body is wrapped for reading instead of JSON parsing:
+`claude_second_opinion`, `claude_debate_open`, and `claude_debate_reply` request structured output, but Claude's schema compliance is model-dependent best-effort. Prefer `structured_content.format` when it is available; for text-only clients or results, check the footer's `format` field before parsing. `format: prose` means Claude answered directly and the body is wrapped for reading instead of JSON parsing:
 
 Pass `structured: true` to `claude_review_diff` to request machine-readable findings with required `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields, plus optional `end_line`, `category`, and `symbol` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.
 

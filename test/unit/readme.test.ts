@@ -40,6 +40,18 @@ describe("README release notes", () => {
     expect(README).toContain("Pass `structured: true` to `claude_review_diff` to request machine-readable findings with required `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields, plus optional `end_line`, `category`, and `symbol` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.");
     expect(README).toContain("Eligible fresh runs append `| continuity: injected(N)` or `| continuity: none` as the final footer segment, after an optional `| format:` segment.");
     expect(README).toContain("Journal-off, owner-disabled, resumed, no-workspace, and `continuity: false` runs omit the continuity segment entirely.");
+    expect(README).toContain("### Machine-readable results");
+    expect(README).toContain('"format": "json",');
+    expect(README).toContain('"session_id": "123e4567-e89b-12d3-a456-426614174000",');
+    expect(README).toContain('"cost_usd": 0.12,');
+    expect(README).toContain('"duration_ms": 3400,');
+    expect(README).toContain('"turns": 2,');
+    expect(README).toContain('"continuity": { "injected": true, "entries": 2 }');
+    expect(README).toContain("`data` is present only when `format` is `json`; prose results use `format: \"prose\"` and omit `data`. Missing numeric metadata is `null`, and continuity-ineligible runs use `continuity: null`.");
+    expect(README).toContain("Read `structured_content` when present. The existing text body and footer are byte-compatible fallbacks and remain unchanged.");
+    expect(README).toContain("Error results carry text only. `claude_panel` remains text-only because it aggregates multiple runs, and the list-shaped spawn-free tools remain text-only in this release.");
+    expect(README).toContain("`claude_continuity_status` instead mirrors its existing compact JSON object directly as `structured_content`, without execution metadata.");
+    expect(README).toContain("Prefer `structured_content.format` when it is available; for text-only clients or results, check the footer's `format` field before parsing.");
     expect(README).toContain("The user prompt travels via stdin and never appears on the command line");
     expect(README).toContain("System guidance, including the tagged continuity digest, is passed as the single value of `--append-system-prompt`");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
