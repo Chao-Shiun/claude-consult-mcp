@@ -23,7 +23,7 @@ export const depthSchema = z.enum(["standard", "deep"]).optional()
   .describe("deep lets Claude delegate read-only exploration to sub-agents for large scopes - slower and several times the usage; requires the machine to enable CLAUDE_CONSULT_CAPABILITY=deep-research.");
 
 export const commonToolShape = {
-  workspace_dir: absolutePathSchema.optional().describe("Absolute path to the project this relates to; becomes Claude's working directory. Reuse the same value when continuing a session."),
+  workspace_dir: absolutePathSchema.optional().describe("Absolute path to the project this relates to; becomes Claude's working directory. Reuse the same value when continuing a session. Pass it on fresh conversations to enable journal continuity (recent-consultation context for this workspace)."),
   model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
   effort: effortSchema.optional().describe("Claude effort override: lower is faster and cheaper, higher is deeper reasoning; subject to the server's configured ceiling. Omit to use the model's default."),
   session_id: sessionIdSchema.optional().describe("session_id from a previous result footer to continue that conversation.")

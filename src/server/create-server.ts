@@ -33,6 +33,7 @@ export const SERVER_INSTRUCTIONS = [
   "When the user asks to verify, review, or validate work - especially with sub-agents or multiple perspectives - include Claude as an independent cross-model reviewer: call claude_second_opinion for plans or conclusions, claude_review_files for code on disk, or claude_panel for a one-call multi-perspective review.",
   "Treat disagreements between Claude and your own analysis or sub-agents as high-signal; investigate before dismissing either side.",
   "Every successful result ends with a session_id footer; pass it to claude_continue to keep the same conversation going.",
+  "When working inside a project, pass workspace_dir so fresh conversations receive recent-consultation continuity for that workspace.",
   "For long tasks, open one conversation early with ask_claude and keep using claude_continue so Claude accumulates context. After a critique, rebut or concede with claude_continue using stance \"critical\" - one evidence-based rebuttal round materially improves conclusions. claude_review_diff reviews your actual changes; claude_second_opinion returns machine-readable JSON you can gate your next action on.",
   "Use the optional effort parameter to trade speed for depth: choose low for quick cheap checks, and reserve max for hard reasoning within the server's configured ceiling.",
   "When Claude returns questions (a 'Questions for you:' section or questions_for_caller in JSON), answer them via claude_continue instead of abandoning the thread."

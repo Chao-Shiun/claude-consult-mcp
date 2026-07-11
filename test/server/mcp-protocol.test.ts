@@ -125,6 +125,7 @@ describe("MCP protocol layer", () => {
     expect(harness.client.getInstructions()).toContain("claude_review_diff");
     expect(harness.client.getInstructions()).toContain("effort");
     expect(harness.client.getInstructions()).toContain("When Claude returns questions (a 'Questions for you:' section or questions_for_caller in JSON), answer them via claude_continue instead of abandoning the thread.");
+    expect(harness.client.getInstructions()).toContain("When working inside a project, pass workspace_dir so fresh conversations receive recent-consultation continuity for that workspace.");
   });
 
   it("lists exactly the nine consult tools without a journal", async () => {
@@ -143,6 +144,7 @@ describe("MCP protocol layer", () => {
     expect(reviewDiff?.description).toContain("actual code changes");
     expect((reviewDiff?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect((properties.workspace_dir as { description?: string }).description).toContain("Pass it on fresh conversations to enable journal continuity (recent-consultation context for this workspace).");
     expect(Object.keys(properties).sort()).toEqual(["context", "effort", "model", "question", "session_id", "workspace_dir"]);
     expect((properties.effort as { enum?: string[] }).enum).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);

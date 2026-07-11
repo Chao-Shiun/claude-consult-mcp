@@ -110,6 +110,8 @@ Entries contain only the listed metadata, not dedicated prompt, file-content, or
 
 When the journal is enabled, fresh advisor conversations with an explicit `workspace_dir`, including gate reviews, receive a `<recent-consultations>` digest of up to 5 recent entries from the current month's journal for the same workspace, newest first. Resumed sessions never receive this digest. Disable continuity with `CLAUDE_CONSULT_CONTINUITY=0`. The digest contains only metadata the journal already stores and is injected as tagged background that Claude is told is context, not instructions.
 
+Continuity activates only when all four conditions are true: the journal is configured, `CLAUDE_CONSULT_CONTINUITY` is not `0`, the run has no `session_id`, and the caller passes an explicit `workspace_dir`.
+
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
 ### Gate your actions on Claude's verdict
@@ -237,7 +239,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 
 - Read-only by design: the exact Claude Code write/execute tool tokens `Write`, `Edit`, `NotebookEdit`, and `Bash` are always rejected before the child process is spawned; permission mode is never bypassed.
 - The `deep-research` tier's default adds only the verified `Agent` sub-agent token. It does not add `Write`, `Edit`, `NotebookEdit`, or `Bash`; the forbidden-token sweep remains unconditional.
-- The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
+- The user prompt travels via stdin and never appears on the command line. System guidance, including the tagged continuity digest, is passed as the single value of `--append-system-prompt`; stored digest fields are output-encoded before insertion. Dynamic non-prompt argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
 - No credentials are stored by this package. The child Claude process uses the machine's existing Claude Code login and inherits the server process environment like a normal child process.
 - The child Claude process inherits the machine's Claude Code user configuration. User-level hooks and plugins, including memory plugins that inject prior context at session start, run inside advisor sessions too and can carry earlier local context into a review. This package neither reads nor controls that plugin context; users who want plugin-free advisor runs should configure those plugins to exclude the relevant workspaces.

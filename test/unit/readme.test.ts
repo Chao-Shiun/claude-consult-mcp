@@ -24,6 +24,9 @@ describe("README release notes", () => {
     expect(README).toContain("Resumed sessions never receive this digest");
     expect(README).toContain("Disable continuity with `CLAUDE_CONSULT_CONTINUITY=0`");
     expect(README).toContain("The digest contains only metadata the journal already stores and is injected as tagged background that Claude is told is context, not instructions");
+    expect(README).toContain("Continuity activates only when all four conditions are true: the journal is configured, `CLAUDE_CONSULT_CONTINUITY` is not `0`, the run has no `session_id`, and the caller passes an explicit `workspace_dir`.");
+    expect(README).toContain("The user prompt travels via stdin and never appears on the command line");
+    expect(README).toContain("System guidance, including the tagged continuity digest, is passed as the single value of `--append-system-prompt`");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate --gate-log <absolute-path>");
     expect(README).toContain("records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`");
@@ -84,5 +87,6 @@ describe("README release notes", () => {
     expect(README).not.toContain("continuity across journal months");
     expect(README).not.toContain("continuity digest from the in-memory ledger");
     expect(README).not.toContain("resumed sessions also receive the continuity digest");
+    expect(README).not.toContain("The prompt travels via stdin — never on the command line");
   });
 });
