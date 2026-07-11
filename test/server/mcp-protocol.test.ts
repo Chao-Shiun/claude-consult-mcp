@@ -61,6 +61,7 @@ function journalWith(entries: readonly JournalEntry[]): Journal {
 function expectReadOnlyAnnotations(tools: Awaited<ReturnType<Client["listTools"]>>["tools"]): void {
   for (const tool of tools) {
     expect(tool.annotations).toEqual({ readOnlyHint: true });
+    expect(tool).not.toHaveProperty("outputSchema");
   }
 }
 
@@ -225,6 +226,10 @@ describe("MCP protocol layer", () => {
     expect(result.isError ?? false).toBe(false);
     expect(content[0]?.text).toContain("the answer");
     expect(content[0]?.text).toContain(`session_id: ${SESSION_ID}`);
+    expect(result.structuredContent).toEqual({
+      format: "prose",
+      meta: { session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: null }
+    });
     expect(harness.requests).toHaveLength(1);
   });
 
@@ -236,6 +241,9 @@ describe("MCP protocol layer", () => {
     expect(content[0]?.text).toContain("## Perspective: correctness");
     expect(content[0]?.text).toContain("## Perspective: security");
     expect(content[0]?.text).toContain("## Perspective: simplicity");
+    const footer = `[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`;
+    expect(content[0]?.text).toBe(`# Claude panel: 3 perspective(s)\n\n## Perspective: correctness\n\nthe answer\n\n${footer}\n\n## Perspective: security\n\nthe answer\n\n${footer}\n\n## Perspective: simplicity\n\nthe answer\n\n${footer}`);
+    expect(result).not.toHaveProperty("structuredContent");
     expect(harness.requests).toHaveLength(3);
   });
 
@@ -243,6 +251,7 @@ describe("MCP protocol layer", () => {
     harness = await startHarness();
     const result = await harness.client.callTool({ name: "ask_claude", arguments: { question: "q", session_id: "not-a-uuid" } });
     expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty("structuredContent");
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0]?.text).toContain("Input validation error");
     expect(content[0]?.text).toContain("session_id");

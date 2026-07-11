@@ -9,6 +9,7 @@ export interface ToolResultContent {
 
 export interface ToolResult {
   readonly content: ToolResultContent[];
+  readonly structuredContent?: Record<string, unknown> | undefined;
   readonly isError?: boolean;
   readonly [key: string]: unknown;
 }
@@ -48,7 +49,18 @@ export function toSuccessResult(envelope: ClaudeEnvelope, options?: SuccessResul
     ? `${STRUCTURED_OUTPUT_NOTICE}\n\n<prose-answer>\n${envelope.result}\n</prose-answer>`
     : envelope.result;
   const footer = formatFooter(envelope, options);
-  return { content: [{ type: "text", text: `${body}\n\n---\n${footer}` }] };
+  const structuredContent = {
+    format: format ?? "prose",
+    ...(format === "json" ? { data: envelope.structuredOutput } : {}),
+    meta: {
+      session_id: envelope.sessionId,
+      cost_usd: envelope.totalCostUsd ?? null,
+      duration_ms: envelope.durationMs ?? null,
+      turns: envelope.numTurns ?? null,
+      continuity: envelope.continuityInfo === undefined ? null : { injected: envelope.continuityInfo.injected, entries: envelope.continuityInfo.entries }
+    }
+  };
+  return { content: [{ type: "text", text: `${body}\n\n---\n${footer}` }], structuredContent };
 }
 
 export function toErrorResult(error: unknown): ToolResult {

@@ -32,26 +32,39 @@ describe("toSuccessResult", () => {
     expect(result.content).toHaveLength(1);
     expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`);
     expect(result.content[0]?.text).not.toContain("format:");
+    expect(result.structuredContent).toEqual({
+      format: "prose",
+      meta: { session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: null }
+    });
+    expect(result.structuredContent).not.toHaveProperty("data");
   });
 
   it("renders missing metrics as n/a", () => {
     const result = toSuccessResult(envelope({ totalCostUsd: undefined, durationMs: undefined, numTurns: undefined }));
     expect(result.content[0]?.text).toContain(`session_id: ${SESSION_ID} | cost_usd: n/a | duration_ms: n/a | turns: n/a`);
+    expect(result.structuredContent?.meta).toEqual({ session_id: SESSION_ID, cost_usd: null, duration_ms: null, turns: null, continuity: null });
   });
 
   it("marks structured schema-compliant results as json in the footer", () => {
     const result = toSuccessResult(envelope({ result: '{"answer":"ok"}', structuredOutput: { answer: "ok" } }), { structuredExpected: true });
     expect(result.content[0]?.text).toBe(`{"answer":"ok"}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json`);
+    expect(result.structuredContent).toEqual({
+      format: "json",
+      data: { answer: "ok" },
+      meta: { session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: null }
+    });
   });
 
   it("appends injected continuity metadata as the last footer segment", () => {
     const result = toSuccessResult({ ...envelope(), continuityInfo: { injected: true, entries: 2 } } as ClaudeEnvelope);
     expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | continuity: injected(2)`);
+    expect(result.structuredContent?.meta).toEqual({ session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: { injected: true, entries: 2 } });
   });
 
   it("appends continuity none only when an eligible outcome is present", () => {
     const result = toSuccessResult({ ...envelope(), continuityInfo: { injected: false, entries: 0 } } as ClaudeEnvelope);
     expect(result.content[0]?.text).toBe(`the answer\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | continuity: none`);
+    expect(result.structuredContent?.meta).toEqual({ session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: { injected: false, entries: 0 } });
     expect(toSuccessResult(envelope()).content[0]?.text).not.toContain("continuity:");
   });
 
@@ -63,6 +76,11 @@ describe("toSuccessResult", () => {
   it("marks prose schema fallbacks and wraps the answer with the exact notice", () => {
     const result = toSuccessResult(envelope({ result: "plain answer" }), { structuredExpected: true });
     expect(result.content[0]?.text).toBe(`${STRUCTURED_NOTICE}\n\n<prose-answer>\nplain answer\n</prose-answer>\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: prose`);
+    expect(result.structuredContent).toEqual({
+      format: "prose",
+      meta: { session_id: SESSION_ID, cost_usd: 0.12, duration_ms: 3400, turns: 2, continuity: null }
+    });
+    expect(result.structuredContent).not.toHaveProperty("data");
   });
 });
 
@@ -71,6 +89,7 @@ describe("toErrorResult", () => {
     const result = toErrorResult(new ClaudeConsultError("CLAUDE_TIMEOUT", "run exceeded 600000 ms", "raise the timeout"));
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toBe("[CLAUDE_TIMEOUT] run exceeded 600000 ms\nHint: raise the timeout");
+    expect(result).not.toHaveProperty("structuredContent");
   });
 
   it("hides details of unexpected exceptions behind INTERNAL_ERROR", () => {
@@ -78,5 +97,6 @@ describe("toErrorResult", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("[INTERNAL_ERROR]");
     expect(result.content[0]?.text).not.toContain("secret database password");
+    expect(result).not.toHaveProperty("structuredContent");
   });
 });
