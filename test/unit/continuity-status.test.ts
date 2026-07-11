@@ -35,6 +35,11 @@ function textOf(result: unknown): string {
   return (result as { readonly content?: readonly { readonly text?: string }[] }).content?.[0]?.text ?? "";
 }
 
+function expectStructuredMirror(result: unknown): void {
+  const text = textOf(result);
+  expect((result as { readonly structuredContent?: Record<string, unknown> }).structuredContent).toEqual(JSON.parse(text));
+}
+
 describe("claude_continuity_status tool", () => {
   it("reports matching current-month entries without exposing their content", async () => {
     const journal = journalWith({ entries: [entry(WORKSPACE, 1), entry(OTHER_WORKSPACE, 2), entry(WORKSPACE, 3)], skippedLines: 0 });
@@ -48,6 +53,7 @@ describe("claude_continuity_status tool", () => {
     expect(journal.readWithStatsSpy).toHaveBeenCalledWith({ month: "2026-07", limit: CONTINUITY_READ_LIMIT });
     expect(journal.appendSpy).not.toHaveBeenCalled();
     expect(text).not.toContain("[claude-consult]");
+    expectStructuredMirror(await tool.execute({ workspace_dir: WORKSPACE }));
   });
 
   it("reports no workspace match when other candidates exist", async () => {
@@ -60,6 +66,7 @@ describe("claude_continuity_status tool", () => {
       would_inject: false,
       reason: "no_workspace_match"
     });
+    expectStructuredMirror(await createContinuityStatusTool(journal, true, () => "2026-07").execute({ workspace_dir: WORKSPACE }));
   });
 
   it("reports no candidates when the current month is empty", async () => {
@@ -72,6 +79,7 @@ describe("claude_continuity_status tool", () => {
       would_inject: false,
       reason: "no_candidates"
     });
+    expectStructuredMirror(await createContinuityStatusTool(journal, true, () => "2026-07").execute({ workspace_dir: WORKSPACE }));
   });
 
   it("reports counts while continuity is disabled by owner policy", async () => {
@@ -84,6 +92,7 @@ describe("claude_continuity_status tool", () => {
       would_inject: false,
       reason: "continuity_disabled"
     });
+    expectStructuredMirror(await createContinuityStatusTool(journal, false, () => "2026-07").execute({ workspace_dir: WORKSPACE }));
   });
 
   it("fails soft with zero counts when the journal is unreadable", async () => {
@@ -94,5 +103,6 @@ describe("claude_continuity_status tool", () => {
     expect(JSON.parse(text)).toEqual({ continuity_enabled: true, candidate_count: 0, matching_count: 0, would_inject: false, reason: "journal_unreadable" });
     expect(text).not.toContain("PRIVATE JOURNAL READ FAILURE");
     expect(journal.appendSpy).not.toHaveBeenCalled();
+    expectStructuredMirror(await createContinuityStatusTool(journal, true, () => "2026-07").execute({ workspace_dir: WORKSPACE }));
   });
 });
