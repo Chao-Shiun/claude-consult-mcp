@@ -112,6 +112,12 @@ When the journal is enabled, fresh advisor conversations with an explicit `works
 
 Continuity activates only when all four conditions are true: the journal is configured, `CLAUDE_CONSULT_CONTINUITY` is not `0`, the run has no `session_id`, and the caller passes an explicit `workspace_dir`.
 
+For clean-context fresh runs, pass `continuity: false`; this can only disable continuity and cannot enable it against the owner's `CLAUDE_CONSULT_CONTINUITY=0` switch.
+
+Run `doctor` inside the project directory to report continuity status and counts for that workspace; it never prints journal content.
+
+Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.
+
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
 ### Gate your actions on Claude's verdict
@@ -270,6 +276,7 @@ Cancelling a tool call in your client also terminates the underlying claude proc
 | `claude_gate_findings` is not listed | Set `CLAUDE_CONSULT_GATE_LOG` or `CLAUDE_CONSULT_JOURNAL_DIR` to a local absolute path in the MCP server environment and restart Codex |
 | Review gate findings are not visible in the next turn | Codex does not inject Stop-hook stdout into model context; install with `--gate-log <absolute-path>` or `--journal-dir <absolute-path>`, configure the same path for the MCP server, then call `claude_gate_findings` |
 | Doctor says the review gate hook is not trusted | Run Codex interactively once and approve the hook; doctor detects the trust record but does not verify the hash |
+| Continuity digest never appears | Run doctor inside that project directory - it reports whether the journal, kill switch, current-month entries, and workspace match line up; pass workspace_dir on the tool call and check CLAUDE_CONSULT_CONTINUITY |
 | Remove review gate hook | `npx -y claude-consult-mcp setup --remove-review-gate` |
 | Uninstall | `codex mcp remove claude-consult` |
 

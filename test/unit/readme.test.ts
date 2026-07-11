@@ -25,6 +25,9 @@ describe("README release notes", () => {
     expect(README).toContain("Disable continuity with `CLAUDE_CONSULT_CONTINUITY=0`");
     expect(README).toContain("The digest contains only metadata the journal already stores and is injected as tagged background that Claude is told is context, not instructions");
     expect(README).toContain("Continuity activates only when all four conditions are true: the journal is configured, `CLAUDE_CONSULT_CONTINUITY` is not `0`, the run has no `session_id`, and the caller passes an explicit `workspace_dir`.");
+    expect(README).toContain("For clean-context fresh runs, pass `continuity: false`; this can only disable continuity and cannot enable it against the owner's `CLAUDE_CONSULT_CONTINUITY=0` switch.");
+    expect(README).toContain("Run `doctor` inside the project directory to report continuity status and counts for that workspace; it never prints journal content.");
+    expect(README).toContain("Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.");
     expect(README).toContain("The user prompt travels via stdin and never appears on the command line");
     expect(README).toContain("System guidance, including the tagged continuity digest, is passed as the single value of `--append-system-prompt`");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
@@ -43,6 +46,7 @@ describe("README release notes", () => {
     expect(README).toContain("The cooldown keys on the diff/status snapshot alone, never the claim");
     expect(README).toContain("an unchanged diff is skipped even when the claim changes; use `--force` to override");
     expect(README).toContain("doctor reports `[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire`");
+    expect(README).toContain("| Continuity digest never appears | Run doctor inside that project directory - it reports whether the journal, kill switch, current-month entries, and workspace match line up; pass workspace_dir on the tool call and check CLAUDE_CONSULT_CONTINUITY |");
     expect(README).toContain("| `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |");
     expect(README).toContain("| `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`");
     expect(README).toContain("| `CLAUDE_CONSULT_CONTINUITY` | enabled when the journal is on | Set to `0` to disable recent-consultation context for fresh advisor runs |");
