@@ -53,7 +53,7 @@ describe("claude_panel tool", () => {
     const { requests, context } = makeContext();
     const tool = createPanelTool(context);
     const signal = new AbortController().signal;
-    const result = await tool.execute({ task: "review this design" }, { signal });
+    const result = await tool.execute({ task: "review this design", continuity: false }, { signal });
     expect(textOf(result)).toContain("# Claude panel: 3 perspective(s)");
     expect(requests).toHaveLength(3);
     expect(requests.map((request) => request.appendSystemPrompt)).toEqual([
@@ -64,6 +64,7 @@ describe("claude_panel tool", () => {
     for (const request of requests) {
       expect(request.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
       expect(request.signal).toBe(signal);
+      expect(request.skipContinuity).toBe(true);
       expect(request.origin).toEqual({ tool: "claude_panel", excerpt: "review this design" });
       expect(request.prompt).toBe(requests[0]?.prompt);
       expect(request).not.toHaveProperty("sessionId");

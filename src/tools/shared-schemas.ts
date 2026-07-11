@@ -26,7 +26,8 @@ export const commonToolShape = {
   workspace_dir: absolutePathSchema.optional().describe("Absolute path to the project this relates to; becomes Claude's working directory. Reuse the same value when continuing a session. Pass it on fresh conversations to enable journal continuity (recent-consultation context for this workspace)."),
   model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
   effort: effortSchema.optional().describe("Claude effort override: lower is faster and cheaper, higher is deeper reasoning; subject to the server's configured ceiling. Omit to use the model's default."),
-  session_id: sessionIdSchema.optional().describe("session_id from a previous result footer to continue that conversation.")
+  session_id: sessionIdSchema.optional().describe("session_id from a previous result footer to continue that conversation."),
+  continuity: z.boolean().optional().describe("Set false to run without the recent-consultations digest (clean context). Cannot enable continuity when the machine owner disabled it or when the run resumes a session.")
 };
 
 export interface CommonToolArgs {
@@ -34,17 +35,19 @@ export interface CommonToolArgs {
   readonly model?: string | undefined;
   readonly effort?: Effort | undefined;
   readonly session_id?: string | undefined;
+  readonly continuity?: boolean | undefined;
 }
 
 export type AnalysisDepth = z.infer<typeof depthSchema>;
 
-export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; effort: Effort | undefined; sessionId: string | undefined; cwd: string | undefined; continuityWorkspaceDir: string | undefined } {
+export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; effort: Effort | undefined; sessionId: string | undefined; cwd: string | undefined; continuityWorkspaceDir: string | undefined; skipContinuity: boolean } {
   return {
     model: args.model,
     effort: args.effort,
     sessionId: args.session_id,
     cwd: args.workspace_dir,
-    continuityWorkspaceDir: args.workspace_dir
+    continuityWorkspaceDir: args.workspace_dir,
+    skipContinuity: args.continuity === false
   };
 }
 

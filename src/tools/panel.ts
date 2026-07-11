@@ -30,7 +30,8 @@ const argsSchema = z.object({
   perspectives: perspectivesSchema.optional(),
   workspace_dir: commonToolShape.workspace_dir,
   model: commonToolShape.model,
-  effort: commonToolShape.effort
+  effort: commonToolShape.effort,
+  continuity: commonToolShape.continuity
 });
 
 const DESCRIPTION = "Run a multi-perspective Claude review panel in ONE call: several independent Claude analyses of the same task, each through a different expert lens (correctness, security, performance, simplicity, architecture, testing), returned as one aggregated report. Use this when the user asks for verification or review from multiple perspectives or with sub-agents - Claude acts as an independent cross-model panel alongside your own work. Each perspective is a separate full Claude run, so usage and latency scale with the number of perspectives (they run concurrently). Provide absolute paths when the panel should read code from disk. Claude only advises; it never modifies files.";
@@ -65,7 +66,8 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
       perspectives: perspectivesSchema.optional().describe("Fixed expert lenses to run, defaulting to correctness, security, and simplicity."),
       workspace_dir: commonToolShape.workspace_dir,
       model: commonToolShape.model,
-      effort: commonToolShape.effort
+      effort: commonToolShape.effort,
+      continuity: commonToolShape.continuity
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra): Promise<ToolResult> => {
       const args = argsSchema.parse(rawArgs);
@@ -80,6 +82,7 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
         continuityWorkspaceDir: args.workspace_dir,
         model: args.model,
         effort: args.effort,
+        skipContinuity: args.continuity === false,
         signal: extra?.signal,
         origin: { tool: "claude_panel", excerpt: args.task }
       })));

@@ -17,7 +17,8 @@ const argsSchema = z.object({
   depth: depthSchema,
   model: commonToolShape.model,
   effort: commonToolShape.effort,
-  session_id: commonToolShape.session_id
+  session_id: commonToolShape.session_id,
+  continuity: commonToolShape.continuity
 });
 
 type CommandFailureHint = "git-missing" | "repo" | "base";
@@ -63,7 +64,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       depth: depthSchema,
       model: commonToolShape.model,
       effort: commonToolShape.effort,
-      session_id: commonToolShape.session_id
+      session_id: commonToolShape.session_id,
+      continuity: commonToolShape.continuity
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
@@ -94,6 +96,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         model: args.model,
         effort: args.effort,
         sessionId: args.session_id,
+        skipContinuity: args.continuity === false,
         depth: args.depth,
         signal: extra?.signal,
         origin: { tool: "claude_review_diff", excerpt: args.question ?? "diff review" }

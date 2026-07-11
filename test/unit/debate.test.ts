@@ -74,7 +74,8 @@ describe("claude_debate_open tool", () => {
       evidence: [{ claim: "The relevant code is only line 10.", type: "file", ref: "src/example.ts:10-11", content: "caller supplied note" }],
       workspace_dir: workspace,
       model: "haiku",
-      effort: "high"
+      effort: "high",
+      continuity: false
     }, { signal });
 
     const request = requests[0];
@@ -97,6 +98,7 @@ describe("claude_debate_open tool", () => {
     expect(request?.cwd).toBe(workspace);
     expect(request?.model).toBe("haiku");
     expect(request?.effort).toBe("high");
+    expect(request?.skipContinuity).toBe(true);
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_debate_open", excerpt: "Should we trust the cache invalidation patch?" });
     expect(tool.description).toContain(STRUCTURED_FORMAT_DESCRIPTION);

@@ -443,13 +443,30 @@ describe("createRunner", () => {
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toMatch(/^<recent-consultations>/);
   });
 
-  it("does not read or inject continuity into resumed conversations", async () => {
+  it("skips continuity for a fresh matching run when the caller opts out", async () => {
+    const read = vi.fn(async () => [continuityEntry(1)]);
+    const journal: Journal = { append: async () => undefined, read };
+    const harness = makeHarness();
+
+    await createRunner({ ...harness.deps, journal }).run({
+      prompt: "clean context",
+      cwd: WORKSPACE,
+      continuityWorkspaceDir: WORKSPACE,
+      skipContinuity: true,
+      appendSystemPrompt: "existing"
+    });
+
+    expect(read).not.toHaveBeenCalled();
+    expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("does not let caller enablement inject continuity into resumed conversations", async () => {
     const read = vi.fn(async () => [continuityEntry(1)]);
     const journal: Journal = { append: async () => undefined, read };
     const harness = makeHarness();
     const runner = createRunner({ ...harness.deps, journal });
 
-    await runner.run({ prompt: "resume", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, sessionId: SESSION_ID, appendSystemPrompt: "existing" });
+    await runner.run({ prompt: "resume", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, skipContinuity: false, sessionId: SESSION_ID, appendSystemPrompt: "existing" });
 
     expect(read).not.toHaveBeenCalled();
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
@@ -473,12 +490,12 @@ describe("createRunner", () => {
     expect(argValue(inferredOnly.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
   });
 
-  it("does not read continuity when the kill switch is disabled", async () => {
+  it("does not let caller enablement override the owner kill switch", async () => {
     const read = vi.fn(async () => [continuityEntry(1)]);
     const journal: Journal = { append: async () => undefined, read };
     const harness = makeHarness({ CLAUDE_CONSULT_CONTINUITY: "0" });
 
-    await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
+    await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, skipContinuity: false, appendSystemPrompt: "existing" });
 
     expect(read).not.toHaveBeenCalled();
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");

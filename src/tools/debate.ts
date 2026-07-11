@@ -51,7 +51,8 @@ const openArgsSchema = z.object({
   evidence: evidenceArraySchema,
   workspace_dir: absolutePathSchema,
   model: modelSchema.optional(),
-  effort: commonToolShape.effort
+  effort: commonToolShape.effort,
+  continuity: commonToolShape.continuity
 });
 
 const replyArgsSchema = z.object({
@@ -170,7 +171,8 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
       evidence: evidenceArraySchema.describe("Evidence items supporting your position."),
       workspace_dir: absolutePathSchema.describe("Absolute path to the project this debate is about; becomes Claude's working directory."),
       model: modelSchema.optional().describe("Claude model override: opus, sonnet, haiku, or a full model id. Omit for the configured default."),
-      effort: commonToolShape.effort
+      effort: commonToolShape.effort,
+      continuity: commonToolShape.continuity
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = openArgsSchema.parse(rawArgs);
@@ -184,6 +186,7 @@ export function createDebateOpenTool(toolContext: ToolContext): ConsultTool {
         continuityWorkspaceDir: args.workspace_dir,
         model: args.model,
         effort: args.effort,
+        skipContinuity: args.continuity === false,
         signal: extra?.signal,
         origin: { tool: "claude_debate_open", excerpt: args.topic }
       }), { structuredExpected: true });

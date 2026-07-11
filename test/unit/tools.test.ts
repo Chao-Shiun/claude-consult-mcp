@@ -79,13 +79,14 @@ describe("ask_claude tool", () => {
   it("wraps context in background tags and forwards common args", async () => {
     const { requests, context } = makeContext();
     const tool = createAskClaudeTool(context);
-    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", session_id: SESSION_ID, effort: "high" });
+    await tool.execute({ question: "q", context: "tried X", workspace_dir: WORKSPACE_DIR, model: "haiku", session_id: SESSION_ID, effort: "high", continuity: false });
     const request = requests[0];
     expect(request?.prompt).toBe("<background-context>\ntried X\n</background-context>\n\nq");
     expect(request?.cwd).toBe(WORKSPACE_DIR);
     expect(request?.model).toBe("haiku");
     expect(request?.sessionId).toBe(SESSION_ID);
     expect(request?.effort).toBe("high");
+    expect(request?.skipContinuity).toBe(true);
     expect(request).not.toHaveProperty("budgetUsd");
   });
 

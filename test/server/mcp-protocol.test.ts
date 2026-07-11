@@ -145,7 +145,11 @@ describe("MCP protocol layer", () => {
     expect((reviewDiff?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
     const properties = (ask?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
     expect((properties.workspace_dir as { description?: string }).description).toContain("Pass it on fresh conversations to enable journal continuity (recent-consultation context for this workspace).");
-    expect(Object.keys(properties).sort()).toEqual(["context", "effort", "model", "question", "session_id", "workspace_dir"]);
+    expect(Object.keys(properties).sort()).toEqual(["context", "continuity", "effort", "model", "question", "session_id", "workspace_dir"]);
+    expect(properties.continuity).toMatchObject({
+      type: "boolean",
+      description: "Set false to run without the recent-consultations digest (clean context). Cannot enable continuity when the machine owner disabled it or when the run resumes a session."
+    });
     expect((properties.effort as { enum?: string[] }).enum).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect((ask?.inputSchema as { required?: string[] }).required).toEqual(["question"]);
     const continueTool = listed.tools.find((tool) => tool.name === "claude_continue");
@@ -155,6 +159,7 @@ describe("MCP protocol layer", () => {
     expect((continueProperties.stance as { enum?: string[] }).enum).toEqual(["neutral", "critical"]);
     const panel = listed.tools.find((tool) => tool.name === "claude_panel");
     const panelProperties = (panel?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect(panelProperties.continuity).toMatchObject({ type: "boolean" });
     const perspectives = panelProperties.perspectives as { items?: { enum?: string[] } };
     expect(perspectives.items?.enum).toEqual(["correctness", "security", "performance", "simplicity", "architecture", "testing"]);
     expect((panel?.inputSchema as { required?: string[] }).required).toEqual(["task"]);
@@ -164,6 +169,11 @@ describe("MCP protocol layer", () => {
     expect((debateOpen?.inputSchema as { required?: string[] }).required?.sort()).toEqual(["evidence", "position", "topic", "workspace_dir"]);
     const debateReply = listed.tools.find((tool) => tool.name === "claude_debate_reply");
     expect(debateReply?.description).toContain("format: prose");
+    const continuityTools = listed.tools
+      .filter((tool) => Object.hasOwn((tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}, "continuity"))
+      .map((tool) => tool.name)
+      .sort();
+    expect(continuityTools).toEqual(["ask_claude", "claude_debate_open", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion"]);
     const sessions = listed.tools.find((tool) => tool.name === "claude_sessions");
     expect(sessions?.description).toContain("List recent Claude conversations");
     const sessionProperties = (sessions?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};

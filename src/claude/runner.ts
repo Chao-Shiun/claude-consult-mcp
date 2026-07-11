@@ -22,6 +22,7 @@ export interface RunnerRequest {
   readonly addDirs?: readonly string[] | undefined;
   readonly cwd?: string | undefined;
   readonly continuityWorkspaceDir?: string | undefined;
+  readonly skipContinuity?: boolean | undefined;
   readonly depth?: "standard" | "deep" | undefined;
   readonly signal?: AbortSignal | undefined;
   readonly origin?: { readonly tool: string; readonly excerpt: string; readonly excerptFromResult?: boolean } | undefined;
@@ -135,7 +136,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     };
     validateRunSpec(runSpec);
     let appendSystemPrompt = request.appendSystemPrompt;
-    if (journal !== undefined && deps.config.continuityEnabled && request.sessionId === undefined && request.cwd !== undefined && request.continuityWorkspaceDir !== undefined) {
+    if (journal !== undefined && deps.config.continuityEnabled && request.skipContinuity !== true && request.sessionId === undefined && request.cwd !== undefined && request.continuityWorkspaceDir !== undefined) {
       try {
         const digest = await readContinuityDigest(journal, request.continuityWorkspaceDir);
         if (digest !== undefined) {
