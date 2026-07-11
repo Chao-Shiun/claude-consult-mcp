@@ -74,11 +74,13 @@ function cwdMatches(actual: string, expected: string): boolean {
 }
 
 export function parseStopHookClaim(raw: string | undefined, expectedCwd: string): string | undefined {
-  if (raw === undefined || raw.trim() === "") {
+  // Windows pipelines commonly prepend a UTF-8 BOM (U+FEFF), which JSON.parse rejects.
+  const text = raw !== undefined && raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  if (text === undefined || text.trim() === "") {
     return undefined;
   }
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return undefined;
     }

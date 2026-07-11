@@ -92,6 +92,10 @@ describe("stop-hook claim input", () => {
     expect(parseStopHookClaim(raw, CWD)).toBeUndefined();
   });
 
+  it("strips a leading UTF-8 BOM before parsing", () => {
+    expect(parseStopHookClaim(String.fromCharCode(0xfeff) + payload(), CWD)).toBe("implemented validation");
+  });
+
   it("allows a payload without cwd", () => {
     expect(parseStopHookClaim(JSON.stringify({ hook_event_name: "Stop", last_assistant_message: "claim" }), CWD)).toBe("claim");
   });
