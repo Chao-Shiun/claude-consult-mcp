@@ -8,6 +8,25 @@ import { toSuccessResult, type ToolResult } from "./tool-result.js";
 
 const DESCRIPTION = "Have Claude review your actual code changes: the server runs read-only git in the given repository and gives Claude the diff plus read access to the surrounding files. Pass the repository root as workspace_dir. By default it reviews uncommitted changes against HEAD; pass base (a branch, tag, or commit) to review everything since that ref (base...HEAD). Use it after implementing something to get an independent cross-model review of the change itself. Claude only advises; it never modifies anything. For reviewing files without git context, use claude_review_files.";
 
+export const REVIEW_FINDINGS_JSON_SCHEMA = JSON.stringify({
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    findings: { type: "array", items: { type: "object", properties: {
+      severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+      file: { type: "string" },
+      line: { anyOf: [{ type: "integer" }, { type: "null" }] },
+      finding: { type: "string" },
+      evidence: { type: "string" },
+      recommendation: { type: "string" },
+      confidence: { type: "number", minimum: 0, maximum: 1 }
+    }, required: ["severity", "file", "line", "finding", "evidence", "recommendation", "confidence"] } }
+  },
+  required: ["summary", "findings"]
+});
+
+const STRUCTURED_DESCRIPTION = "Return findings as machine-readable JSON — severity, file, line, finding, evidence, recommendation, confidence — instead of prose. Best-effort: falls back to prose with a notice if the model does not comply. Omit for the prose review.";
+
 const baseRefSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._\/~^@-]{0,127}$/);
 
 const argsSchema = z.object({
@@ -18,7 +37,8 @@ const argsSchema = z.object({
   model: commonToolShape.model,
   effort: commonToolShape.effort,
   session_id: commonToolShape.session_id,
-  continuity: commonToolShape.continuity
+  continuity: commonToolShape.continuity,
+  structured: z.boolean().optional()
 });
 
 type CommandFailureHint = "git-missing" | "repo" | "base";
@@ -65,7 +85,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       model: commonToolShape.model,
       effort: commonToolShape.effort,
       session_id: commonToolShape.session_id,
-      continuity: commonToolShape.continuity
+      continuity: commonToolShape.continuity,
+      structured: z.boolean().optional().describe(STRUCTURED_DESCRIPTION)
     },
     execute: async (rawArgs: Record<string, unknown>, extra?: ToolExecuteExtra) => {
       const args = argsSchema.parse(rawArgs);
@@ -87,9 +108,10 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
       }
       const question = args.question ?? "Review these changes for correctness, security, and simplicity. Cite file paths and line numbers from the diff in every finding.";
       const prompt = `Review the following code changes. You may Read the surrounding files in the repository for context before judging.\n\n<git-status>\n${status.trim() === "" ? "(clean)" : status.trim()}\n</git-status>\n\n<diff>\n${diff}\n</diff>\n\n<question>\n${question}\n</question>`;
-      return toSuccessResult(await toolContext.runClaude({
+      const envelope = await toolContext.runClaude({
         prompt,
         appendSystemPrompt: composeAdvisorPrompt(),
+        jsonSchema: args.structured === true ? REVIEW_FINDINGS_JSON_SCHEMA : undefined,
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
         continuityWorkspaceDir: args.workspace_dir,
@@ -100,7 +122,8 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         depth: args.depth,
         signal: extra?.signal,
         origin: { tool: "claude_review_diff", excerpt: args.question ?? "diff review" }
-      }));
+      });
+      return args.structured === true ? toSuccessResult(envelope, { structuredExpected: true }) : toSuccessResult(envelope);
     }
   });
 }

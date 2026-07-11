@@ -4,10 +4,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ClaudeEnvelope } from "../../src/claude/parse-output.js";
 import type { RunnerRequest } from "../../src/claude/runner.js";
+import { LIMITS } from "../../src/constants.js";
 import { isClaudeConsultError } from "../../src/errors.js";
 import { runCommand } from "../../src/run-command.js";
-import { createReviewDiffTool } from "../../src/tools/review-diff.js";
+import { createReviewDiffTool, REVIEW_FINDINGS_JSON_SCHEMA } from "../../src/tools/review-diff.js";
 import type { ToolContext } from "../../src/tools/shared-schemas.js";
+import { STRUCTURED_OUTPUT_NOTICE } from "../../src/tools/tool-result.js";
 
 const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -23,14 +25,14 @@ const FIXTURE_ENVELOPE: ClaudeEnvelope = Object.freeze({
   numTurns: 2
 });
 
-function makeContext(): { requests: RunnerRequest[]; context: ToolContext } {
+function makeContext(envelope: ClaudeEnvelope = FIXTURE_ENVELOPE): { requests: RunnerRequest[]; context: ToolContext } {
   const requests: RunnerRequest[] = [];
   return {
     requests,
     context: {
       runClaude: async (request) => {
         requests.push(request);
-        return FIXTURE_ENVELOPE;
+        return envelope;
       }
     }
   };
@@ -75,6 +77,59 @@ async function exists(filePath: string): Promise<boolean> {
 }
 
 describe("claude_review_diff tool", () => {
+  it("defines the required review findings schema below the child argv limit", () => {
+    const schema = JSON.parse(REVIEW_FINDINGS_JSON_SCHEMA) as {
+      required: string[];
+      properties: { findings: { items: { required: string[]; properties: Record<string, unknown> } } };
+    };
+
+    expect(Buffer.byteLength(REVIEW_FINDINGS_JSON_SCHEMA, "utf8")).toBeLessThan(LIMITS.jsonSchemaMaxBytes);
+    expect(schema.required).toEqual(["summary", "findings"]);
+    expect(schema.properties.findings.items.required).toEqual(["severity", "file", "line", "finding", "evidence", "recommendation", "confidence"]);
+    expect(Object.keys(schema.properties.findings.items.properties)).toEqual(["severity", "file", "line", "finding", "evidence", "recommendation", "confidence"]);
+  });
+
+  it("keeps prose byte-identical when structured is absent or false", async () => {
+    const repo = await makeRepo();
+    await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
+    const { requests, context } = makeContext();
+    const tool = createReviewDiffTool(context);
+
+    const absent = await tool.execute({ workspace_dir: repo });
+    const explicitFalse = await tool.execute({ workspace_dir: repo, structured: false });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.jsonSchema).toBeUndefined();
+    expect(requests[1]?.jsonSchema).toBeUndefined();
+    expect(requests[1]?.prompt).toBe(requests[0]?.prompt);
+    expect(textOf(explicitFalse)).toBe(textOf(absent));
+    expect(textOf(absent)).toBe(`diff review\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2`);
+  });
+
+  it("returns schema-compliant structured findings with a json footer when opted in", async () => {
+    const repo = await makeRepo();
+    await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
+    const findings = { summary: "one issue", findings: [{ severity: "high", file: "a.ts", line: 1, finding: "wrong value", evidence: "+export const value = 2", recommendation: "restore the expected value", confidence: 0.9 }] };
+    const envelope = { ...FIXTURE_ENVELOPE, result: JSON.stringify(findings), structuredOutput: findings };
+    const { requests, context } = makeContext(envelope);
+
+    const result = await createReviewDiffTool(context).execute({ workspace_dir: repo, structured: true });
+
+    expect(requests[0]?.jsonSchema).toBe(REVIEW_FINDINGS_JSON_SCHEMA);
+    expect(textOf(result)).toBe(`${JSON.stringify(findings)}\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: json`);
+  });
+
+  it("uses the existing prose fallback when structured findings are not returned", async () => {
+    const repo = await makeRepo();
+    await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
+    const { requests, context } = makeContext();
+
+    const result = await createReviewDiffTool(context).execute({ workspace_dir: repo, structured: true });
+
+    expect(requests[0]?.jsonSchema).toBe(REVIEW_FINDINGS_JSON_SCHEMA);
+    expect(textOf(result)).toBe(`${STRUCTURED_OUTPUT_NOTICE}\n\n<prose-answer>\ndiff review\n</prose-answer>\n\n---\n[claude-consult] session_id: ${SESSION_ID} | cost_usd: 0.12 | duration_ms: 3400 | turns: 2 | format: prose`);
+  });
+
   it("reviews uncommitted changes against HEAD and grants repo context", async () => {
     const repo = await makeRepo();
     await writeFile(path.join(repo, "a.ts"), "export const value = 2;\n");
