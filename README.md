@@ -10,7 +10,7 @@ Codex CLI / Desktop app  (shared ~/.codex/config.toml)
    |          npx -y claude-consult-mcp          (macOS / Linux)
    v
 MCP stdio server (this package)
-   |  9 tools by default; 10 with gate findings; 11 with journal + gate findings
+   |  9 tools by default; 10 with gate findings; 12 with journal + gate findings
    |  zod-validated, read-only allowlist, injection-hardened argv
    v
 claude -p --output-format json   (your existing Claude Code login)
@@ -65,7 +65,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 3. 依上方說明把 `startup_timeout_sec = 60`、`tool_timeout_sec = 600` 加進 `~/.codex/config.toml`
 4. 重啟 Codex 桌面 app；用 `npx -y claude-consult-mcp doctor` 檢查狀態
 
-## The tools: nine by default, ten with gate findings, eleven with journal
+## The tools: nine by default, ten with gate findings, twelve with journal
 
 | Tool | Use it for | Required args |
 |---|---|---|
@@ -80,6 +80,7 @@ codex mcp add claude-consult -- npx -y claude-consult-mcp
 | `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |
 | `claude_gate_findings` | Read recent automatic review-gate findings back in-band without a Claude run | none (optional `workspace_dir`, `limit`) |
 | `claude_consult_history` | Recover past consultation metadata from the opt-in machine journal across Codex sessions and server restarts | none (optional `workspace_dir`, `limit`) |
+| `claude_continuity_status` | Report content-free continuity readiness counts for a workspace without a Claude run | `workspace_dir` |
 
 `claude_continue` also accepts `stance: "critical"` for follow-ups after an adversarial review or debate so Claude keeps its reviewer discipline.
 
@@ -100,6 +101,8 @@ Successful single-run results that actually ran Claude end with a machine-readab
 [claude-consult] session_id: <uuid> | cost_usd: 0.12 | duration_ms: 3400 | turns: 2
 ```
 
+Eligible fresh runs append `| continuity: injected(N)` or `| continuity: none` as the final footer segment, after an optional `| format:` segment. Journal-off, owner-disabled, resumed, no-workspace, and `continuity: false` runs omit the continuity segment entirely.
+
 Example prompt to Codex: *"Use the ask_claude tool to ask Claude what it thinks about this design, then continue the session and ask it to fact-check the API you plan to use."*
 
 ### Consultation journal
@@ -118,11 +121,15 @@ Run `doctor` inside the project directory to report continuity status and counts
 
 Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.
 
+`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`. It predicts journal readiness for a fresh consultation; resumed sessions and `continuity: false` still suppress the digest. It is available only when the journal is enabled and is the machine-readable counterpart to the count-only `doctor` diagnostics.
+
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
 ### Gate your actions on Claude's verdict
 
 `claude_second_opinion`, `claude_debate_open`, and `claude_debate_reply` request structured output, but Claude's schema compliance is model-dependent best-effort. Check the footer `format` field before parsing; `format: prose` means Claude answered directly and the body is wrapped for reading instead of JSON parsing:
+
+Pass `structured: true` to `claude_review_diff` to request machine-readable findings with `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.
 
 ```ts
 const text = result.content[0].text;

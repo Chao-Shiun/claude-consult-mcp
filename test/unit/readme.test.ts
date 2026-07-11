@@ -5,11 +5,12 @@ const README = readFileSync(new URL("../../README.md", import.meta.url), "utf8")
 
 describe("README release notes", () => {
   it("documents the v0.9 approval behavior and existing tool contracts", () => {
-    expect(README).toContain("|  9 tools by default; 10 with gate findings; 11 with journal + gate findings");
-    expect(README).toContain("## The tools: nine by default, ten with gate findings, eleven with journal");
+    expect(README).toContain("|  9 tools by default; 10 with gate findings; 12 with journal + gate findings");
+    expect(README).toContain("## The tools: nine by default, ten with gate findings, twelve with journal");
     expect(README).toContain("| `claude_sessions` | Recover recent session ids without a Claude run | none (optional `workspace_dir`, `limit`) |");
     expect(README).toContain("| `claude_gate_findings` | Read recent automatic review-gate findings back in-band without a Claude run | none (optional `workspace_dir`, `limit`) |");
     expect(README).toContain("| `claude_consult_history` | Recover past consultation metadata from the opt-in machine journal across Codex sessions and server restarts | none (optional `workspace_dir`, `limit`) |");
+    expect(README).toContain("| `claude_continuity_status` | Report content-free continuity readiness counts for a workspace without a Claude run | `workspace_dir` |");
     expect(README).toContain("Losing a session? Call `claude_sessions`");
     expect(README).toContain("Use `claude_gate_findings` when the user mentions review-gate findings");
     expect(README).toContain("The tool reads the findings log resolved by the MCP server's environment");
@@ -28,6 +29,11 @@ describe("README release notes", () => {
     expect(README).toContain("For clean-context fresh runs, pass `continuity: false`; this can only disable continuity and cannot enable it against the owner's `CLAUDE_CONSULT_CONTINUITY=0` switch.");
     expect(README).toContain("Run `doctor` inside the project directory to report continuity status and counts for that workspace; it never prints journal content.");
     expect(README).toContain("Set `CLAUDE_CONSULT_LOG_LEVEL=debug` to show one per-run continuity skip reason or injected entry count on stderr.");
+    expect(README).toContain("`claude_continuity_status` returns compact JSON with exactly `continuity_enabled`, `candidate_count`, `matching_count`, `would_inject`, and `reason`. It predicts journal readiness for a fresh consultation; resumed sessions and `continuity: false` still suppress the digest.");
+    expect(README).toContain("It is available only when the journal is enabled and is the machine-readable counterpart to the count-only `doctor` diagnostics.");
+    expect(README).toContain("Pass `structured: true` to `claude_review_diff` to request machine-readable findings with `severity`, `file`, `line`, `finding`, `evidence`, `recommendation`, and `confidence` fields. This is best-effort and uses the existing prose fallback; omit it for the default prose review.");
+    expect(README).toContain("Eligible fresh runs append `| continuity: injected(N)` or `| continuity: none` as the final footer segment, after an optional `| format:` segment.");
+    expect(README).toContain("Journal-off, owner-disabled, resumed, no-workspace, and `continuity: false` runs omit the continuity segment entirely.");
     expect(README).toContain("The user prompt travels via stdin and never appears on the command line");
     expect(README).toContain("System guidance, including the tagged continuity digest, is passed as the single value of `--append-system-prompt`");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
