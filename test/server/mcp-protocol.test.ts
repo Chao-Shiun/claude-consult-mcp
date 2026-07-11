@@ -53,7 +53,8 @@ function isHarnessOptions(value: unknown): value is HarnessOptions {
 function journalWith(entries: readonly JournalEntry[]): Journal {
   return Object.freeze({
     append: async () => undefined,
-    read: async () => entries
+    read: async () => entries,
+    readWithStats: async () => ({ entries, skippedLines: 0 })
   });
 }
 
@@ -199,17 +200,22 @@ describe("MCP protocol layer", () => {
     expect(Object.keys(findingsProperties).sort()).toEqual(["limit", "workspace_dir"]);
   });
 
-  it("lists exactly eleven consult tools with a journal directory", async () => {
+  it("lists exactly twelve consult tools with a journal directory", async () => {
     harness = await startHarness({ env: { CLAUDE_CONSULT_JOURNAL_DIR: JOURNAL_DIR }, journal: journalWith([]) });
     const listed = await harness.client.listTools();
     expectReadOnlyAnnotations(listed.tools);
     const names = listed.tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(["ask_claude", "claude_consult_history", "claude_continue", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
+    expect(names).toEqual(["ask_claude", "claude_consult_history", "claude_continue", "claude_continuity_status", "claude_debate_open", "claude_debate_reply", "claude_gate_findings", "claude_panel", "claude_review_diff", "claude_review_files", "claude_second_opinion", "claude_sessions"]);
     const history = listed.tools.find((tool) => tool.name === "claude_consult_history");
     expect(history?.description).toContain("List past Claude consultations recorded in this machine's journal");
     expect(history?.description).toContain("Only available when the machine owner has set CLAUDE_CONSULT_JOURNAL_DIR.");
     const historyProperties = (history?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
     expect(Object.keys(historyProperties).sort()).toEqual(["limit", "workspace_dir"]);
+    const continuityStatus = listed.tools.find((tool) => tool.name === "claude_continuity_status");
+    expect(continuityStatus?.description).toBe("Read-only, no Claude call. Reports whether recent-consultation continuity would apply for a workspace: counts of candidate and matching journal entries and whether a fresh consultation there would receive the digest. Call it before consulting to decide whether to pass workspace_dir. It returns only counts and status, never consultation content. Per-call factors (resuming a session, continuity:false) still suppress the digest regardless of this result.");
+    expect((continuityStatus?.inputSchema as { required?: string[] }).required).toEqual(["workspace_dir"]);
+    const continuityStatusProperties = (continuityStatus?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {};
+    expect(Object.keys(continuityStatusProperties)).toEqual(["workspace_dir"]);
   });
 
   it("returns the answer with the footer on a successful call", async () => {

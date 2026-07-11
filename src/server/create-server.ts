@@ -14,6 +14,7 @@ import { createSecondOpinionTool } from "../tools/second-opinion.js";
 import { createSessionsTool } from "../tools/sessions.js";
 import { createHistoryTool } from "../tools/history.js";
 import { createGateFindingsTool } from "../tools/gate-findings.js";
+import { createContinuityStatusTool } from "../tools/continuity-status.js";
 import type { ConsultTool, ToolContext } from "../tools/shared-schemas.js";
 import { toErrorResult } from "../tools/tool-result.js";
 import { resolveGateLogPath } from "../gate-log.js";
@@ -25,6 +26,7 @@ export interface ServerDeps {
   readonly ledger?: SessionLedger | undefined;
   readonly journal?: Journal | undefined;
   readonly env?: Readonly<Record<string, string | undefined>> | undefined;
+  readonly continuityEnabled?: boolean | undefined;
 }
 
 export const SERVER_INSTRUCTIONS = [
@@ -55,7 +57,7 @@ export function createServer(deps: ServerDeps): McpServer {
     createContinueSessionTool(context),
     ...(gateLogPath === undefined ? [] : [createGateFindingsTool(gateLogPath)]),
     ...(deps.ledger === undefined ? [] : [createSessionsTool(deps.ledger)]),
-    ...(deps.journal === undefined ? [] : [createHistoryTool(deps.journal)])
+    ...(deps.journal === undefined ? [] : [createHistoryTool(deps.journal), createContinuityStatusTool(deps.journal, deps.continuityEnabled ?? true)])
   ];
   for (const tool of tools) {
     server.registerTool(tool.name, {
