@@ -67,6 +67,14 @@ interface Harness {
   deps: RunnerDeps;
 }
 
+function capturedLogger(level: "info" | "debug" = "debug"): { logger: ReturnType<typeof createLogger>; lines: string[] } {
+  const lines: string[] = [];
+  return {
+    lines,
+    logger: createLogger(level, { write: (chunk) => lines.push(chunk) })
+  };
+}
+
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -501,6 +509,71 @@ describe("createRunner", () => {
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
   });
 
+  it("logs exactly one content-free continuity outcome for each non-timeout path", async () => {
+    const cases: ReadonlyArray<{
+      expected: string;
+      env?: Record<string, string>;
+      journal?: Journal;
+      request: RunnerRequest;
+    }> = [
+      {
+        expected: "continuity skipped: journal disabled",
+        request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE }
+      },
+      {
+        expected: "continuity skipped: disabled by env",
+        env: { CLAUDE_CONSULT_CONTINUITY: "0" },
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1)] },
+        request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE }
+      },
+      {
+        expected: "continuity skipped: caller opt-out",
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1)] },
+        request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, skipContinuity: true }
+      },
+      {
+        expected: "continuity skipped: resumed session",
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1)] },
+        request: { prompt: "resume", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, sessionId: SESSION_ID }
+      },
+      {
+        expected: "continuity skipped: no workspace",
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1)] },
+        request: { prompt: "fresh" }
+      },
+      {
+        expected: "continuity skipped: no matching entries",
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1, OTHER_WORKSPACE)] },
+        request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE }
+      },
+      {
+        expected: "continuity injected: 2 entries",
+        journal: { append: async () => undefined, read: async () => [continuityEntry(1), continuityEntry(2)] },
+        request: { prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE }
+      }
+    ];
+
+    for (const testCase of cases) {
+      const harness = makeHarness(testCase.env);
+      const logs = capturedLogger();
+      await createRunner({ ...harness.deps, logger: logs.logger, journal: testCase.journal }).run(testCase.request);
+      expect(logs.lines.filter((line) => line.includes("continuity "))).toEqual([
+        `[claude-consult] [debug] ${testCase.expected}\n`
+      ]);
+      expect(logs.lines.join("\n")).not.toMatch(/topic 1|123e4567|ask_claude|<recent-consultations>/);
+    }
+  });
+
+  it("does not expose continuity diagnostics at info level", async () => {
+    const harness = makeHarness();
+    const logs = capturedLogger("info");
+    const journal: Journal = { append: async () => undefined, read: async () => [] };
+
+    await createRunner({ ...harness.deps, logger: logs.logger, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
+
+    expect(logs.lines.join("\n")).not.toContain("continuity ");
+  });
+
   it("falls back to the original prompt and still spawns when continuity reading fails", async () => {
     const journal: Journal = { append: async () => undefined, read: async () => { throw new Error("disk unavailable"); } };
     const harness = makeHarness();
@@ -510,6 +583,27 @@ describe("createRunner", () => {
     expect(harness.spawnRequests).toHaveLength(1);
     expect(harness.spawnRequests[0]?.prompt).toBe("user payload");
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+  });
+
+  it("reports a stats-reader failure as a continuity read error", async () => {
+    const read = vi.fn(async () => []);
+    const journal = {
+      append: async () => undefined,
+      read,
+      readWithStats: async () => {
+        throw new Error("PRIVATE JOURNAL READ FAILURE");
+      }
+    } as Journal & { readWithStats: () => Promise<never> };
+    const harness = makeHarness();
+    const logs = capturedLogger();
+
+    await createRunner({ ...harness.deps, logger: logs.logger, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
+
+    expect(read).not.toHaveBeenCalled();
+    expect(logs.lines.filter((line) => line.includes("continuity "))).toEqual([
+      "[claude-consult] [debug] continuity skipped: read timeout or error\n"
+    ]);
+    expect(logs.lines.join("\n")).not.toContain("PRIVATE JOURNAL READ FAILURE");
   });
 
   it("falls back to the original prompt when a malformed journal entry cannot be composed", async () => {
@@ -528,7 +622,8 @@ describe("createRunner", () => {
     try {
       const journal: Journal = { append: async () => undefined, read: async () => new Promise<readonly JournalEntry[]>(() => undefined) };
       const harness = makeHarness();
-      const pending = createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
+      const logs = capturedLogger();
+      const pending = createRunner({ ...harness.deps, logger: logs.logger, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
 
       await vi.advanceTimersByTimeAsync(LIMITS.continuityReadTimeoutMs - 1);
       expect(harness.spawnRequests).toHaveLength(0);
@@ -537,6 +632,9 @@ describe("createRunner", () => {
       expect(harness.spawnRequests).toHaveLength(1);
       await expect(pending).resolves.toMatchObject({ sessionId: SESSION_ID });
       expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
+      expect(logs.lines.filter((line) => line.includes("continuity "))).toEqual([
+        "[claude-consult] [debug] continuity skipped: read timeout or error\n"
+      ]);
     } finally {
       vi.useRealTimers();
     }

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { composeContinuityDigest } from "../../src/claude/continuity.js";
+import { composeContinuityDigest, selectContinuityEntries } from "../../src/claude/continuity.js";
 import type { JournalEntry } from "../../src/journal.js";
 
 const WORKSPACE = process.platform === "win32" ? "C:\\repo\\project" : "/repo/project";
@@ -21,6 +21,18 @@ function entry(index: number, overrides: Partial<JournalEntry> = {}): JournalEnt
 }
 
 describe("composeContinuityDigest", () => {
+  it("selects the same newest matching entries that the digest renders", () => {
+    const entries = [entry(1), entry(6), entry(3), entry(5), entry(0), entry(4), entry(2), entry(7, { workspaceDir: OTHER_WORKSPACE })];
+
+    expect(selectContinuityEntries(entries, path.join(WORKSPACE, ".")).map((item) => item.sessionId)).toEqual([
+      "123e4567-e89b-12d3-a456-426614174006",
+      "123e4567-e89b-12d3-a456-426614174005",
+      "123e4567-e89b-12d3-a456-426614174004",
+      "123e4567-e89b-12d3-a456-426614174003",
+      "123e4567-e89b-12d3-a456-426614174002"
+    ]);
+  });
+
   it("returns undefined for empty input and entries without a matching workspace", () => {
     expect(composeContinuityDigest([], WORKSPACE)).toBeUndefined();
     expect(composeContinuityDigest([entry(1, { workspaceDir: undefined }), entry(2, { workspaceDir: OTHER_WORKSPACE })], WORKSPACE)).toBeUndefined();

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { runDoctor, type DoctorDeps } from "../../src/cli/doctor.js";
-import { VERIFIED_CLAUDE_VERSION } from "../../src/constants.js";
+import { ENV, VERIFIED_CLAUDE_VERSION } from "../../src/constants.js";
+import type { JournalEntry, JournalReadStats } from "../../src/journal.js";
+
+const WORKSPACE = process.platform === "win32" ? "C:\\repo\\project" : "/repo/project";
+const OTHER_WORKSPACE = process.platform === "win32" ? "C:\\repo\\other" : "/repo/other";
+const JOURNAL_DIR = process.platform === "win32" ? "C:\\journal" : "/tmp/journal";
+const SESSION_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 interface DepsOptions {
   platform?: string;
@@ -10,19 +16,48 @@ interface DepsOptions {
   configText?: string | undefined;
   hooksText?: string | undefined;
   liveResult?: { ok: boolean; detail: string };
+  env?: Readonly<Record<string, string | undefined>>;
+  cwd?: string;
+  journalResult?: JournalReadStats | Error;
 }
 
-function makeDeps(options: DepsOptions = {}): { lines: string[]; liveCalls: number[]; deps: DoctorDeps } {
+function journalEntry(workspaceDir: string, overrides: Partial<JournalEntry> = {}): JournalEntry {
+  return {
+    ts: "2026-07-11T00:00:00.000Z",
+    tool: "ask_claude",
+    sessionId: SESSION_ID,
+    workspaceDir,
+    model: "haiku",
+    excerpt: "PRIVATE JOURNAL CONTENT",
+    costUsd: undefined,
+    durationMs: undefined,
+    ...overrides
+  };
+}
+
+function makeDeps(options: DepsOptions = {}): { lines: string[]; liveCalls: number[]; journalReads: Array<{ dir: string; month: string; limit: number }>; deps: DoctorDeps } {
   const lines: string[] = [];
   const liveCalls: number[] = [];
+  const journalReads: Array<{ dir: string; month: string; limit: number }> = [];
   const claudeResult = options.claudeResult ?? { exitCode: 0, stdout: "2.1.163 (Claude Code)", stderr: "" };
   const codexResult = options.codexResult ?? { exitCode: 0, stdout: "codex-cli 0.142.0", stderr: "" };
   return {
     lines,
     liveCalls,
+    journalReads,
     deps: {
       platform: options.platform ?? "win32",
       nodeVersion: options.nodeVersion ?? "v24.13.0",
+      env: options.env ?? {},
+      cwd: options.cwd ?? WORKSPACE,
+      currentMonth: "2026-07",
+      readJournal: async (dir, month, limit) => {
+        journalReads.push({ dir, month, limit });
+        if (options.journalResult instanceof Error) {
+          throw options.journalResult;
+        }
+        return options.journalResult ?? { entries: Object.freeze([]), skippedLines: 0 };
+      },
       runCommand: async (command) => {
         const result = command === "claude" ? claudeResult : codexResult;
         if (result instanceof Error) {
@@ -61,6 +96,77 @@ const TRUSTED_1_0 = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:s
 const UNTRUSTED_WITH_DISTANT_HASH = `${REGISTERED_WIN}[hooks.state.'/home/me/.codex/hooks.json:stop:0:0']\nfoo = "bar"\n# 1\n# 2\n# 3\n# 4\n# 5\n# 6\ntrusted_hash = "too-far"\n`;
 
 describe("runDoctor", () => {
+  it("prints exactly one content-free continuity line for every diagnostic state", async () => {
+    const cases: ReadonlyArray<{ options: DepsOptions; expected: string; reads: number }> = [
+      {
+        options: {},
+        expected: `[ok] continuity inactive: ${ENV.journalDir} is not set`,
+        reads: 0
+      },
+      {
+        options: { env: { [ENV.journalDir]: "relative/journal" } },
+        expected: `[warn] continuity inactive: ${ENV.journalDir} is not a local absolute path`,
+        reads: 0
+      },
+      {
+        options: { env: { [ENV.journalDir]: JOURNAL_DIR, [ENV.continuity]: "0" } },
+        expected: `[ok] continuity disabled by ${ENV.continuity}=0`,
+        reads: 0
+      },
+      {
+        options: { env: { [ENV.journalDir]: JOURNAL_DIR }, journalResult: new Error("PRIVATE read failure") },
+        expected: "[warn] continuity: current-month journal unreadable",
+        reads: 1
+      },
+      {
+        options: {
+          env: { [ENV.journalDir]: JOURNAL_DIR },
+          journalResult: {
+            entries: Object.freeze([
+              journalEntry(WORKSPACE),
+              journalEntry(OTHER_WORKSPACE, { sessionId: "123e4567-e89b-12d3-a456-426614174001" }),
+              journalEntry(WORKSPACE, { sessionId: "not-a-uuid" })
+            ]),
+            skippedLines: 2
+          }
+        },
+        expected: `[ok] continuity active: 1 of 3 current-month entries match workspace ${WORKSPACE} (2 invalid entries skipped)`,
+        reads: 1
+      },
+      {
+        options: {
+          env: { [ENV.journalDir]: JOURNAL_DIR },
+          journalResult: { entries: Object.freeze([journalEntry(OTHER_WORKSPACE)]), skippedLines: 1 }
+        },
+        expected: `[ok] continuity active: 0 of 1 current-month entries match workspace ${WORKSPACE} (no digest here yet) (1 invalid entries skipped)`,
+        reads: 1
+      }
+    ];
+
+    for (const testCase of cases) {
+      const { lines, journalReads, deps } = makeDeps({ configText: REGISTERED_WIN, ...testCase.options });
+      await expect(runDoctor([], deps)).resolves.toBe(0);
+      expect(lines.filter((line) => line.includes("continuity"))).toEqual([testCase.expected]);
+      expect(journalReads).toHaveLength(testCase.reads);
+      expect(lines.join("\n")).not.toMatch(/PRIVATE JOURNAL CONTENT|PRIVATE read failure|123e4567|ask_claude|<recent-consultations>/);
+    }
+  });
+
+  it("probes the current month in the doctor process workspace without changing an existing failure exit code", async () => {
+    const { lines, journalReads, deps } = makeDeps({
+      nodeVersion: "v18.19.0",
+      configText: REGISTERED_WIN,
+      env: { [ENV.journalDir]: JOURNAL_DIR },
+      journalResult: { entries: Object.freeze([]), skippedLines: 0 }
+    });
+
+    expect(await runDoctor([], deps)).toBe(1);
+    expect(journalReads).toEqual([{ dir: JOURNAL_DIR, month: "2026-07", limit: 20 }]);
+    expect(lines.filter((line) => line.includes("continuity"))).toEqual([
+      `[ok] continuity active: 0 of 0 current-month entries match workspace ${WORKSPACE} (no digest here yet)`
+    ]);
+  });
+
   it("reports all-ok on a healthy machine", async () => {
     const { lines, deps } = makeDeps({ configText: REGISTERED_WIN });
     const exitCode = await runDoctor([], deps);
@@ -184,5 +290,16 @@ describe("runDoctor", () => {
     expect(second.liveCalls).toHaveLength(1);
     expect(exitCode).toBe(1);
     expect(second.lines.join("\n")).toContain("not authenticated");
+  });
+
+  it("never prints a successful live probe's session id", async () => {
+    const { lines, deps } = makeDeps({
+      configText: REGISTERED_WIN,
+      liveResult: { ok: true, detail: `claude answered (session ${SESSION_ID})` }
+    });
+
+    expect(await runDoctor(["--live"], deps)).toBe(0);
+    expect(lines).toContain("[ok] live probe: claude answered");
+    expect(lines.join("\n")).not.toContain(SESSION_ID);
   });
 });

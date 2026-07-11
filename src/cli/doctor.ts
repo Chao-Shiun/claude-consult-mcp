@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CODEX_SERVER_ID, SERVER_NAME, VERIFIED_CLAUDE_VERSION } from "../constants.js";
+import { CODEX_SERVER_ID, ENV, SERVER_NAME, VERIFIED_CLAUDE_VERSION } from "../constants.js";
 import { loadConfig } from "../config.js";
 import { isClaudeConsultError, toDisplayText } from "../errors.js";
+import { isValidLocalAbsolutePath } from "../gate-log.js";
+import { createJournal, type JournalReadStats } from "../journal.js";
 import { createLogger } from "../logger.js";
 import { createDefaultRunner } from "../claude/runner.js";
+import { CONTINUITY_READ_LIMIT, selectContinuityEntries } from "../claude/continuity.js";
 import { runCommand, type CommandResult } from "../run-command.js";
 
 export interface LiveProbeResult {
@@ -16,6 +19,10 @@ export interface LiveProbeResult {
 export interface DoctorDeps {
   readonly platform: string;
   readonly nodeVersion: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly cwd: string;
+  readonly currentMonth: string;
+  readonly readJournal: (dir: string, month: string, limit: number) => Promise<JournalReadStats>;
   readonly runCommand: (command: string, args: readonly string[]) => Promise<CommandResult>;
   readonly readConfigToml: () => Promise<string | undefined>;
   readonly readHooksJson: () => Promise<string | undefined>;
@@ -32,6 +39,11 @@ function extractSection(config: string, header: string): string {
 
 function extractClaudeVersion(versionOutput: string): string {
   return versionOutput.match(/\d+\.\d+\.\d+/u)?.[0] ?? "unknown";
+}
+
+function readEnv(env: Readonly<Record<string, string | undefined>>, name: string): string | undefined {
+  const value = env[name]?.trim();
+  return value === "" ? undefined : value;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -151,10 +163,32 @@ export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Prom
     }
   }
 
+  const journalDir = readEnv(deps.env, ENV.journalDir);
+  if (journalDir === undefined) {
+    ok(`continuity inactive: ${ENV.journalDir} is not set`);
+  } else if (!isValidLocalAbsolutePath(journalDir)) {
+    warn(`continuity inactive: ${ENV.journalDir} is not a local absolute path`);
+  } else if (readEnv(deps.env, ENV.continuity) === "0") {
+    ok(`continuity disabled by ${ENV.continuity}=0`);
+  } else {
+    try {
+      const stats = await deps.readJournal(journalDir, deps.currentMonth, CONTINUITY_READ_LIMIT);
+      const matching = selectContinuityEntries(stats.entries, deps.cwd).length;
+      const skipped = stats.skippedLines > 0 ? ` (${stats.skippedLines} invalid entries skipped)` : "";
+      if (matching > 0) {
+        ok(`continuity active: ${matching} of ${stats.entries.length} current-month entries match workspace ${deps.cwd}${skipped}`);
+      } else {
+        ok(`continuity active: 0 of ${stats.entries.length} current-month entries match workspace ${deps.cwd} (no digest here yet)${skipped}`);
+      }
+    } catch {
+      warn("continuity: current-month journal unreadable");
+    }
+  }
+
   if (live) {
     const probe = await deps.liveProbe();
     if (probe.ok) {
-      ok(`live probe: ${probe.detail}`);
+      ok("live probe: claude answered");
     } else {
       fail(`live probe: ${probe.detail}`);
     }
@@ -164,9 +198,14 @@ export async function runDoctor(argv: readonly string[], deps: DoctorDeps): Prom
 }
 
 export function createDefaultDoctorDeps(print: (line: string) => void): DoctorDeps {
+  const journalLogger = createLogger("silent");
   return Object.freeze({
     platform: process.platform,
     nodeVersion: process.version,
+    env: process.env,
+    cwd: process.cwd(),
+    currentMonth: new Date().toISOString().slice(0, 7),
+    readJournal: async (dir: string, month: string, limit: number) => createJournal(dir, journalLogger).readWithStats({ month, limit }),
     runCommand,
     readConfigToml: async () => {
       try {
@@ -187,8 +226,8 @@ export function createDefaultDoctorDeps(print: (line: string) => void): DoctorDe
         const config = loadConfig();
         const logger = createLogger("silent");
         const runner = createDefaultRunner(config, logger);
-        const envelope = await runner.run({ prompt: "Reply with exactly: ok" });
-        return { ok: true, detail: `claude answered (session ${envelope.sessionId})` };
+        await runner.run({ prompt: "Reply with exactly: ok" });
+        return { ok: true, detail: "claude answered" };
       } catch (error) {
         return { ok: false, detail: isClaudeConsultError(error) ? toDisplayText(error) : String(error) };
       }

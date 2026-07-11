@@ -81,6 +81,34 @@ describe("createJournal", () => {
 
     expect((await journal.read()).map((entry) => entry.sessionId)).toEqual([SESSION_A]);
     expect(logs.debug.join("\n")).toContain("skipping corrupt journal line");
+    expect(logs.debug.join("\n")).not.toContain("not json");
+
+    const stats = await journal.readWithStats({ month: "2026-03" });
+    expect(stats.entries.map((entry) => entry.sessionId)).toEqual([SESSION_A]);
+    expect(stats.skippedLines).toBe(2);
+    expect(Object.isFrozen(stats)).toBe(true);
+  });
+
+  it("limits stats reads to the same current-month window used for continuity", async () => {
+    const dir = await tempDir();
+    const logs = logger();
+    const journal = createJournal(dir, logs.logger);
+    const entries = Array.from({ length: 21 }, (_, index) => JSON.stringify({
+      ts: `2026-03-10T00:${String(index).padStart(2, "0")}:00.000Z`,
+      tool: "ask_claude",
+      sessionId: SESSION_A,
+      workspaceDir: dir,
+      model: undefined,
+      excerpt: `entry ${index}`,
+      costUsd: undefined,
+      durationMs: undefined
+    }));
+    await writeFile(path.join(dir, "consult-journal-2026-03.jsonl"), `${entries.join("\n")}\n`);
+
+    const readWithLimit = journal.readWithStats as (filter: { month: string; limit: number }) => ReturnType<typeof journal.readWithStats>;
+    const stats = await readWithLimit({ month: "2026-03", limit: 20 });
+
+    expect(stats.entries).toHaveLength(20);
   });
 
   it("returns no entries when every journal line is malformed", async () => {

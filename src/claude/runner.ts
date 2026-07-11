@@ -7,7 +7,7 @@ import type { Logger } from "../logger.js";
 import { createSemaphore } from "../semaphore.js";
 import { createSessionLedger, type SessionLedger } from "../session-ledger.js";
 import { buildClaudeArgs, resolveRunPolicy, validateRunSpec } from "./build-args.js";
-import { composeContinuityDigest } from "./continuity.js";
+import { composeContinuityDigest, CONTINUITY_READ_LIMIT, selectContinuityEntries } from "./continuity.js";
 import { createDefaultClaudeLocator } from "./locate.js";
 import { parseClaudeOutput, type ClaudeEnvelope, type RawRunOutput } from "./parse-output.js";
 import { createDefaultSpawnDeps, spawnClaude, type SpawnClaudeRequest } from "./spawn-claude.js";
@@ -87,17 +87,29 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
   }
 }
 
-async function readContinuityDigest(journal: Journal, workspaceDir: string): Promise<string | undefined> {
+interface ContinuityReadResult {
+  readonly digest: string | undefined;
+  readonly count: number;
+}
+
+async function readContinuityDigest(journal: Journal, workspaceDir: string): Promise<ContinuityReadResult | undefined> {
   let timeout: NodeJS.Timeout | undefined;
   try {
+    const read = journal.readWithStats === undefined
+      ? journal.read({ limit: CONTINUITY_READ_LIMIT, month: new Date().toISOString().slice(0, 7) })
+      : journal.readWithStats({ limit: CONTINUITY_READ_LIMIT, month: new Date().toISOString().slice(0, 7) }).then((stats) => stats.entries);
     const entries = await Promise.race([
-      journal.read({ limit: 20, month: new Date().toISOString().slice(0, 7) }),
+      read,
       new Promise<undefined>((resolve) => {
         timeout = setTimeout(() => resolve(undefined), LIMITS.continuityReadTimeoutMs);
         timeout.unref();
       })
     ]);
-    return entries === undefined ? undefined : composeContinuityDigest(entries, workspaceDir);
+    if (entries === undefined) {
+      return undefined;
+    }
+    const selected = selectContinuityEntries(entries, workspaceDir);
+    return { digest: composeContinuityDigest(selected, workspaceDir), count: selected.length };
   } finally {
     if (timeout !== undefined) {
       clearTimeout(timeout);
@@ -136,14 +148,29 @@ export function createRunner(deps: RunnerDeps): Runner {
     };
     validateRunSpec(runSpec);
     let appendSystemPrompt = request.appendSystemPrompt;
-    if (journal !== undefined && deps.config.continuityEnabled && request.skipContinuity !== true && request.sessionId === undefined && request.cwd !== undefined && request.continuityWorkspaceDir !== undefined) {
+    if (journal === undefined) {
+      deps.logger.debug("continuity skipped: journal disabled");
+    } else if (!deps.config.continuityEnabled) {
+      deps.logger.debug("continuity skipped: disabled by env");
+    } else if (request.skipContinuity === true) {
+      deps.logger.debug("continuity skipped: caller opt-out");
+    } else if (request.sessionId !== undefined) {
+      deps.logger.debug("continuity skipped: resumed session");
+    } else if (request.cwd === undefined || request.continuityWorkspaceDir === undefined) {
+      deps.logger.debug("continuity skipped: no workspace");
+    } else {
       try {
-        const digest = await readContinuityDigest(journal, request.continuityWorkspaceDir);
-        if (digest !== undefined) {
-          appendSystemPrompt = appendSystemPrompt === undefined ? digest : `${appendSystemPrompt}\n\n${digest}`;
+        const result = await readContinuityDigest(journal, request.continuityWorkspaceDir);
+        if (result === undefined) {
+          deps.logger.debug("continuity skipped: read timeout or error");
+        } else if (result.digest === undefined) {
+          deps.logger.debug("continuity skipped: no matching entries");
+        } else {
+          appendSystemPrompt = appendSystemPrompt === undefined ? result.digest : `${appendSystemPrompt}\n\n${result.digest}`;
+          deps.logger.debug(`continuity injected: ${result.count} entries`);
         }
       } catch {
-        // Continuity is optional background; every read or parse failure is a no-op.
+        deps.logger.debug("continuity skipped: read timeout or error");
       }
     }
     const args = buildClaudeArgs({

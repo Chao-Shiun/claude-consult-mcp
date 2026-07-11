@@ -14,6 +14,11 @@ export interface JournalEntry {
   readonly durationMs: number | undefined;
 }
 
+export interface JournalReadStats {
+  readonly entries: readonly JournalEntry[];
+  readonly skippedLines: number;
+}
+
 interface JournalReadFilter {
   readonly workspaceDir?: string;
   readonly limit?: number;
@@ -23,6 +28,11 @@ interface JournalReadFilter {
 export interface Journal {
   readonly append: (entry: JournalEntry) => Promise<void>;
   readonly read: (filter?: JournalReadFilter) => Promise<readonly JournalEntry[]>;
+  readonly readWithStats?: (filter?: JournalReadFilter) => Promise<JournalReadStats>;
+}
+
+export interface JournalWithStats extends Journal {
+  readonly readWithStats: (filter?: JournalReadFilter) => Promise<JournalReadStats>;
 }
 
 function monthFileName(date: Date): string {
@@ -67,7 +77,7 @@ function isJournalFile(name: string): boolean {
   return /^consult-journal-\d{4}-\d{2}\.jsonl$/.test(name);
 }
 
-export function createJournal(dir: string, logger: Logger, now: () => Date = () => new Date()): Journal {
+export function createJournal(dir: string, logger: Logger, now: () => Date = () => new Date()): JournalWithStats {
   const append = async (entry: JournalEntry): Promise<void> => {
     try {
       await mkdir(dir, { recursive: true });
@@ -77,19 +87,22 @@ export function createJournal(dir: string, logger: Logger, now: () => Date = () 
     }
   };
 
-  const read = async (filter?: JournalReadFilter): Promise<readonly JournalEntry[]> => {
-    const limit = clampLimit(filter?.limit);
+  const collect = async (filter: JournalReadFilter | undefined, limit: number, swallowDirectoryError: boolean): Promise<JournalReadStats> => {
     let names: string[];
     try {
       names = (await readdir(dir))
         .filter((name) => isJournalFile(name) && (filter?.month === undefined || name === `consult-journal-${filter.month}.jsonl`))
         .sort()
         .reverse();
-    } catch {
-      return Object.freeze([]);
+    } catch (error) {
+      if (!swallowDirectoryError) {
+        throw error;
+      }
+      return Object.freeze({ entries: Object.freeze([]), skippedLines: 0 });
     }
 
     const entries: JournalEntry[] = [];
+    let skippedLines = 0;
     for (const name of names) {
       if (entries.length >= limit) {
         break;
@@ -108,13 +121,25 @@ export function createJournal(dir: string, logger: Logger, now: () => Date = () 
           if (filter?.workspaceDir === undefined || entry.workspaceDir === filter.workspaceDir) {
             entries.push(entry);
           }
-        } catch (error) {
-          logger.debug(`skipping corrupt journal line in ${name}: ${error instanceof Error ? error.message : String(error)}`);
+        } catch {
+          skippedLines += 1;
+          logger.debug(`skipping corrupt journal line in ${name}`);
         }
       }
     }
-    return Object.freeze(entries.sort((left, right) => right.ts.localeCompare(left.ts)).slice(0, limit));
+    return Object.freeze({
+      entries: Object.freeze(entries.sort((left, right) => right.ts.localeCompare(left.ts)).slice(0, limit)),
+      skippedLines
+    });
   };
 
-  return Object.freeze({ append, read });
+  const read = async (filter?: JournalReadFilter): Promise<readonly JournalEntry[]> => {
+    return (await collect(filter, clampLimit(filter?.limit), true)).entries;
+  };
+
+  const readWithStats = async (filter?: JournalReadFilter): Promise<JournalReadStats> => {
+    return collect(filter, clampLimit(filter?.limit), false);
+  };
+
+  return Object.freeze({ append, read, readWithStats });
 }
