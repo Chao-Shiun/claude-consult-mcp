@@ -20,6 +20,10 @@ describe("README release notes", () => {
     expect(README).toContain("consult-journal-YYYY-MM.jsonl");
     expect(README).toContain("Entries contain only the listed metadata, not dedicated prompt, file-content, or answer-body fields");
     expect(README).toContain("For review-gate entries, the 120-character topic excerpt comes from the first non-empty line of Claude's findings and may contain the complete answer when it fits within the cap");
+    expect(README).toContain("fresh advisor conversations with an explicit `workspace_dir`, including gate reviews, receive a `<recent-consultations>` digest of up to 5 recent entries from the current month's journal for the same workspace, newest first");
+    expect(README).toContain("Resumed sessions never receive this digest");
+    expect(README).toContain("Disable continuity with `CLAUDE_CONSULT_CONTINUITY=0`");
+    expect(README).toContain("The digest contains only metadata the journal already stores and is injected as tagged background that Claude is told is context, not instructions");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate");
     expect(README).toContain("npx -y claude-consult-mcp setup --install-review-gate --gate-log <absolute-path>");
     expect(README).toContain("records findings to `CLAUDE_CONSULT_GATE_LOG` or `<CLAUDE_CONSULT_JOURNAL_DIR>/review-gate.log`");
@@ -38,6 +42,7 @@ describe("README release notes", () => {
     expect(README).toContain("doctor reports `[warn] review-gate hook installed but not trusted - run codex interactively once and approve the hook, or it will not fire`");
     expect(README).toContain("| `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |");
     expect(README).toContain("| `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`");
+    expect(README).toContain("| `CLAUDE_CONSULT_CONTINUITY` | enabled when the journal is on | Set to `0` to disable recent-consultation context for fresh advisor runs |");
     expect(README).toContain("CLAUDE_CONSULT_GATE_MODEL");
     expect(README).toContain("Claude-calling tools also accept optional `effort`");
     expect(README).toContain("Fable models still default to `--effort max`, but that default is silently clamped to `CLAUDE_CONSULT_MAX_EFFORT`");
@@ -51,6 +56,10 @@ describe("README release notes", () => {
     expect(README).toContain("`CLAUDE_CONSULT_ALLOWED_TOOLS` can replace the non-deep default with any valid non-forbidden tool tokens");
     expect(README).toContain("`setup` can persist only `--model`, `--capability`, `--allowed-models`, and `--max-budget-usd` in the registered server environment");
     expect(README).toContain("Configure the other variables directly for the MCP server in `~/.codex/config.toml`");
+    expect(README).toContain("The child Claude process inherits the machine's Claude Code user configuration");
+    expect(README).toContain("User-level hooks and plugins, including memory plugins that inject prior context at session start, run inside advisor sessions too");
+    expect(README).toContain("This package neither reads nor controls that plugin context");
+    expect(README).toContain("configure those plugins to exclude the relevant workspaces");
     expect(README).toContain("Codex CLI `0.142.0` and `0.144.1`");
     expect(README).toContain("`default_tools_approval_mode`: `\"auto\"` (the default), `\"prompt\"`, `\"writes\"`, or `\"approve\"`");
     expect(README).toContain("All claude-consult tools declare the MCP `readOnlyHint` annotation, so the default mode auto-approves them with no configuration");
@@ -72,5 +81,8 @@ describe("README release notes", () => {
     expect(README).not.toContain("reads the transcript file");
     expect(README).not.toContain("injects findings into Codex context");
     expect(README).not.toContain("passive output");
+    expect(README).not.toContain("continuity across journal months");
+    expect(README).not.toContain("continuity digest from the in-memory ledger");
+    expect(README).not.toContain("resumed sessions also receive the continuity digest");
   });
 });

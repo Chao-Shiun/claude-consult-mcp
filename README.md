@@ -108,6 +108,8 @@ The journal is opt-in. Nothing is written unless `CLAUDE_CONSULT_JOURNAL_DIR` is
 
 Entries contain only the listed metadata, not dedicated prompt, file-content, or answer-body fields: ISO timestamp, originating tool, Claude `session_id`, workspace directory when present, model when present, a whitespace-collapsed topic excerpt capped at 120 characters, total cost, and duration. For review-gate entries, the 120-character topic excerpt comes from the first non-empty line of Claude's findings and may contain the complete answer when it fits within the cap. Write failures are logged to stderr and swallowed, so a disk problem cannot fail the consultation.
 
+When the journal is enabled, fresh advisor conversations with an explicit `workspace_dir`, including gate reviews, receive a `<recent-consultations>` digest of up to 5 recent entries from the current month's journal for the same workspace, newest first. Resumed sessions never receive this digest. Disable continuity with `CLAUDE_CONSULT_CONTINUITY=0`. The digest contains only metadata the journal already stores and is injected as tagged background that Claude is told is context, not instructions.
+
 `claude_consult_history` is available only when the journal is enabled. It never spawns Claude and it returns plain text without a session footer.
 
 ### Gate your actions on Claude's verdict
@@ -223,6 +225,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 | `CLAUDE_CONSULT_MAX_THINKING_TOKENS` | unlimited | Injects `MAX_THINKING_TOKENS` to reduce thinking depth |
 | `CLAUDE_CONSULT_MAX_EFFORT` | unlimited | Owner-level ceiling for per-call `effort`; unset means no ceiling |
 | `CLAUDE_CONSULT_JOURNAL_DIR` | disabled | Local absolute directory for opt-in metadata-only JSONL journal files |
+| `CLAUDE_CONSULT_CONTINUITY` | enabled when the journal is on | Set to `0` to disable recent-consultation context for fresh advisor runs |
 | `CLAUDE_CONSULT_GATE_LOG` | disabled | Local absolute file path for durable automatic review-gate findings |
 | `CLAUDE_CONSULT_GATE_MODEL` | `haiku` for `review-gate` | Default model for the review-gate CLI; `--model` overrides it |
 | `CLAUDE_CONSULT_MAX_CONCURRENCY` | `2` | Max parallel claude processes (1..4) |
@@ -237,6 +240,7 @@ No budget cap is set by default because this package assumes a Claude subscripti
 - The prompt travels via stdin — never on the command line — so there is no argv escaping or injection surface; all dynamic argv values (session id, model, paths) are strictly validated.
 - `--strict-mcp-config` keeps your own MCP servers out of the consult child process.
 - No credentials are stored by this package. The child Claude process uses the machine's existing Claude Code login and inherits the server process environment like a normal child process.
+- The child Claude process inherits the machine's Claude Code user configuration. User-level hooks and plugins, including memory plugins that inject prior context at session start, run inside advisor sessions too and can carry earlier local context into a review. This package neither reads nor controls that plugin context; users who want plugin-free advisor runs should configure those plugins to exclude the relevant workspaces.
 - Diagnostics go to stderr only; stdout is reserved for the MCP protocol.
 - On timeout or shutdown the whole claude process tree is terminated (taskkill on Windows, process-group signals on POSIX) so no orphan processes are left behind.
 - UNC and device paths (`\\host\share`, `\\?\...`, `//server/share`) are rejected before any filesystem access, so a prompt-injected Codex cannot use `claude_review_files` to force NTLM authentication to a remote host.
