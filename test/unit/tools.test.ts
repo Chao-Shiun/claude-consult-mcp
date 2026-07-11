@@ -159,6 +159,7 @@ describe("claude_review_files tool", () => {
     expect(request?.appendSystemPrompt).toContain(ADVISOR_SYSTEM_PROMPT);
     expect(request?.addDirs).toEqual([base, subDir]);
     expect(request?.cwd).toBe(base);
+    expect(request?.continuityWorkspaceDir).toBeUndefined();
     expect(request?.signal).toBe(signal);
     expect(request?.origin).toEqual({ tool: "claude_review_files", excerpt: "find the bug" });
     expect(request).not.toHaveProperty("jsonSchema");
@@ -172,6 +173,7 @@ describe("claude_review_files tool", () => {
     const tool = createReviewFilesTool(context);
     await tool.execute({ paths: [fileA], question: "q", workspace_dir: base, depth: "deep" });
     expect(requests[0]?.cwd).toBe(base);
+    expect(requests[0]?.continuityWorkspaceDir).toBe(base);
     expect(requests[0]?.depth).toBe("deep");
   });
 

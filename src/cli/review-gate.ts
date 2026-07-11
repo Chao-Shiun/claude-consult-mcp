@@ -219,6 +219,7 @@ export async function runReviewGate(argv: readonly string[], deps: ReviewGateDep
       appendSystemPrompt: composeAdvisorPrompt(),
       addDirs: [deps.cwd],
       cwd: deps.cwd,
+      continuityWorkspaceDir: deps.cwd,
       model,
       origin: { tool: "review-gate", excerpt: "automatic post-turn diff review", excerptFromResult: true }
     });

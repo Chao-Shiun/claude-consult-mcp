@@ -38,12 +38,13 @@ export interface CommonToolArgs {
 
 export type AnalysisDepth = z.infer<typeof depthSchema>;
 
-export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; effort: Effort | undefined; sessionId: string | undefined; cwd: string | undefined } {
+export function toRunnerBase(args: CommonToolArgs): { model: string | undefined; effort: Effort | undefined; sessionId: string | undefined; cwd: string | undefined; continuityWorkspaceDir: string | undefined } {
   return {
     model: args.model,
     effort: args.effort,
     sessionId: args.session_id,
-    cwd: args.workspace_dir
+    cwd: args.workspace_dir,
+    continuityWorkspaceDir: args.workspace_dir
   };
 }
 

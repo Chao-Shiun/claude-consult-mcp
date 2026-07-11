@@ -90,6 +90,7 @@ export function createReviewDiffTool(toolContext: ToolContext): ConsultTool {
         appendSystemPrompt: composeAdvisorPrompt(),
         addDirs: [args.workspace_dir],
         cwd: args.workspace_dir,
+        continuityWorkspaceDir: args.workspace_dir,
         model: args.model,
         effort: args.effort,
         sessionId: args.session_id,

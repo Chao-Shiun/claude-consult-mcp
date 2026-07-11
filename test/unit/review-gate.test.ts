@@ -406,6 +406,7 @@ describe("review-gate CLI", () => {
     expect(recorded.requests[0]?.appendSystemPrompt).toContain("strictly advisory");
     expect(recorded.requests[0]?.addDirs).toEqual([CWD]);
     expect(recorded.requests[0]?.cwd).toBe(CWD);
+    expect(recorded.requests[0]?.continuityWorkspaceDir).toBe(CWD);
     expect(recorded.requests[0]?.origin).toEqual({ tool: "review-gate", excerpt: "automatic post-turn diff review", excerptFromResult: true });
   });
 

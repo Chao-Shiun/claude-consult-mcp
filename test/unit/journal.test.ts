@@ -71,7 +71,7 @@ describe("createJournal", () => {
     expect((await journal.read({ month: "2026-03" })).map((entry) => entry.sessionId)).toEqual([SESSION_C, SESSION_B]);
   });
 
-  it("skips malformed entries normally and rejects them for strict reads", async () => {
+  it("skips malformed entries while keeping valid entries", async () => {
     const dir = await tempDir();
     const logs = logger();
     const journal = createJournal(dir, logs.logger, () => new Date("2026-03-10T00:00:00.000Z"));
@@ -81,7 +81,36 @@ describe("createJournal", () => {
 
     expect((await journal.read()).map((entry) => entry.sessionId)).toEqual([SESSION_A]);
     expect(logs.debug.join("\n")).toContain("skipping corrupt journal line");
-    await expect(journal.read({ strict: true })).rejects.toThrow();
+  });
+
+  it("returns no entries when every journal line is malformed", async () => {
+    const dir = await tempDir();
+    const logs = logger();
+    const journal = createJournal(dir, logs.logger, () => new Date("2026-03-10T00:00:00.000Z"));
+    await writeFile(path.join(dir, "consult-journal-2026-03.jsonl"), "not json\n{\"tool\":42}\n");
+
+    expect(await journal.read({ month: "2026-03" })).toEqual([]);
+    expect(logs.debug).toHaveLength(2);
+  });
+
+  it("keeps entries with legacy numeric metadata without exposing invalid numeric values", async () => {
+    const dir = await tempDir();
+    const logs = logger();
+    const journal = createJournal(dir, logs.logger, () => new Date("2026-03-10T00:00:00.000Z"));
+    const legacy = {
+      ts: "2026-03-10T00:00:00.000Z",
+      tool: "ask_claude",
+      sessionId: SESSION_A,
+      workspaceDir: dir,
+      model: "haiku",
+      excerpt: "legacy metadata",
+      costUsd: "0.1",
+      durationMs: "20"
+    };
+    await writeFile(path.join(dir, "consult-journal-2026-03.jsonl"), `${JSON.stringify(legacy)}\n`);
+
+    expect(await journal.read({ month: "2026-03" })).toEqual([{ ...legacy, costUsd: undefined, durationMs: undefined }]);
+    expect(logs.debug).toEqual([]);
   });
 
   it("swallows append failures and logs an error", async () => {

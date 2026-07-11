@@ -21,6 +21,7 @@ export interface RunnerRequest {
   readonly jsonSchema?: string | undefined;
   readonly addDirs?: readonly string[] | undefined;
   readonly cwd?: string | undefined;
+  readonly continuityWorkspaceDir?: string | undefined;
   readonly depth?: "standard" | "deep" | undefined;
   readonly signal?: AbortSignal | undefined;
   readonly origin?: { readonly tool: string; readonly excerpt: string; readonly excerptFromResult?: boolean } | undefined;
@@ -57,7 +58,6 @@ function validatePrompt(prompt: string): void {
 }
 
 const DEEP_RESEARCH_GUIDANCE = "You may delegate read-only exploration to sub-agents to cover large scopes, then synthesize their findings yourself.";
-const CONTINUITY_READ_TIMEOUT_MS = 100;
 
 function resolveAllowedTools(config: Config, depth: RunnerRequest["depth"]): readonly string[] {
   if (depth === "deep" && config.capability !== "deep-research") {
@@ -90,9 +90,9 @@ async function readContinuityDigest(journal: Journal, workspaceDir: string): Pro
   let timeout: NodeJS.Timeout | undefined;
   try {
     const entries = await Promise.race([
-      journal.read({ limit: 20, month: new Date().toISOString().slice(0, 7), strict: true }),
+      journal.read({ limit: 20, month: new Date().toISOString().slice(0, 7) }),
       new Promise<undefined>((resolve) => {
-        timeout = setTimeout(() => resolve(undefined), CONTINUITY_READ_TIMEOUT_MS);
+        timeout = setTimeout(() => resolve(undefined), LIMITS.continuityReadTimeoutMs);
         timeout.unref();
       })
     ]);
@@ -135,9 +135,9 @@ export function createRunner(deps: RunnerDeps): Runner {
     };
     validateRunSpec(runSpec);
     let appendSystemPrompt = request.appendSystemPrompt;
-    if (journal !== undefined && deps.config.continuityEnabled && request.sessionId === undefined && request.cwd !== undefined) {
+    if (journal !== undefined && deps.config.continuityEnabled && request.sessionId === undefined && request.cwd !== undefined && request.continuityWorkspaceDir !== undefined) {
       try {
-        const digest = await readContinuityDigest(journal, request.cwd);
+        const digest = await readContinuityDigest(journal, request.continuityWorkspaceDir);
         if (digest !== undefined) {
           appendSystemPrompt = appendSystemPrompt === undefined ? digest : `${appendSystemPrompt}\n\n${digest}`;
         }

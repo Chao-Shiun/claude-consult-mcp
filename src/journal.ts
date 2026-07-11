@@ -18,7 +18,6 @@ interface JournalReadFilter {
   readonly workspaceDir?: string;
   readonly limit?: number;
   readonly month?: string;
-  readonly strict?: boolean;
 }
 
 export interface Journal {
@@ -34,16 +33,21 @@ function clampLimit(limit: number | undefined): number {
   return Math.min(100, Math.max(1, limit ?? 20));
 }
 
-function freezeEntry(entry: JournalEntry): JournalEntry {
-  return Object.freeze({ ...entry, excerpt: normalizeExcerpt(entry.excerpt) });
-}
-
 function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
 }
 
-function isOptionalNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function freezeEntry(entry: JournalEntry): JournalEntry {
+  return Object.freeze({
+    ...entry,
+    excerpt: normalizeExcerpt(entry.excerpt),
+    costUsd: normalizeOptionalNumber(entry.costUsd),
+    durationMs: normalizeOptionalNumber(entry.durationMs)
+  });
 }
 
 export function isJournalEntry(value: unknown): value is JournalEntry {
@@ -56,9 +60,7 @@ export function isJournalEntry(value: unknown): value is JournalEntry {
     && typeof entry.sessionId === "string"
     && isOptionalString(entry.workspaceDir)
     && isOptionalString(entry.model)
-    && typeof entry.excerpt === "string"
-    && isOptionalNumber(entry.costUsd)
-    && isOptionalNumber(entry.durationMs);
+    && typeof entry.excerpt === "string";
 }
 
 function isJournalFile(name: string): boolean {
@@ -107,9 +109,6 @@ export function createJournal(dir: string, logger: Logger, now: () => Date = () 
             entries.push(entry);
           }
         } catch (error) {
-          if (filter?.strict === true) {
-            throw error;
-          }
           logger.debug(`skipping corrupt journal line in ${name}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }

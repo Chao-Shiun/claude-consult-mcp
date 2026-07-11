@@ -58,6 +58,7 @@ describe("constants", () => {
     expect(LIMITS.gateStdinTimeoutMs).toBe(1000);
     expect(LIMITS.gateClaimMaxBytes).toBe(4 * 1024);
     expect(LIMITS.continuityEntries).toBe(5);
+    expect(LIMITS.continuityReadTimeoutMs).toBe(250);
   });
 
   it("defines exactly three capability tiers without any write-capable tool", () => {

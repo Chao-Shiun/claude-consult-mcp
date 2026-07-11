@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config.js";
-import { CAPABILITY_TOOLS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
+import { CAPABILITY_TOOLS, LIMITS, SUBAGENT_TOOL_TOKEN } from "../../src/constants.js";
 import { isClaudeConsultError, type ErrorCode } from "../../src/errors.js";
 import { createLogger } from "../../src/logger.js";
 import { createDefaultRunner, createRunner, type RunnerDeps, type RunnerRequest } from "../../src/claude/runner.js";
@@ -419,7 +419,7 @@ describe("createRunner", () => {
     const harness = makeHarness();
     const runner = createRunner({ ...harness.deps, journal });
 
-    await runner.run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing system prompt" });
+    await runner.run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing system prompt" });
 
     const spawn = harness.spawnRequests[0];
     const systemPrompt = argValue(spawn?.args ?? [], "--append-system-prompt");
@@ -430,7 +430,7 @@ describe("createRunner", () => {
     expect(systemPrompt).not.toContain("topic 1");
     expect(systemPrompt).not.toContain("topic 7");
     expect(systemPrompt?.indexOf("topic 6")).toBeLessThan(systemPrompt?.indexOf("topic 5") ?? -1);
-    expect(read).toHaveBeenCalledWith({ limit: 20, month: new Date().toISOString().slice(0, 7), strict: true });
+    expect(read).toHaveBeenCalledWith({ limit: 20, month: new Date().toISOString().slice(0, 7) });
   });
 
   it("uses the digest as the whole system prompt when the request has no existing system prompt", async () => {
@@ -438,7 +438,7 @@ describe("createRunner", () => {
     const harness = makeHarness();
     const runner = createRunner({ ...harness.deps, journal });
 
-    await runner.run({ prompt: "fresh", cwd: WORKSPACE });
+    await runner.run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
 
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toMatch(/^<recent-consultations>/);
   });
@@ -449,23 +449,28 @@ describe("createRunner", () => {
     const harness = makeHarness();
     const runner = createRunner({ ...harness.deps, journal });
 
-    await runner.run({ prompt: "resume", cwd: WORKSPACE, sessionId: SESSION_ID, appendSystemPrompt: "existing" });
+    await runner.run({ prompt: "resume", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, sessionId: SESSION_ID, appendSystemPrompt: "existing" });
 
     expect(read).not.toHaveBeenCalled();
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
   });
 
-  it("does not read continuity when the journal or explicit cwd is absent", async () => {
+  it("does not read continuity when the journal, execution cwd, or explicit continuity workspace is absent", async () => {
     const withoutJournal = makeHarness();
-    await createRunner(withoutJournal.deps).run({ prompt: "fresh", cwd: WORKSPACE });
+    await createRunner(withoutJournal.deps).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE });
     expect(argValue(withoutJournal.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
 
     const read = vi.fn(async () => [continuityEntry(1)]);
     const journal: Journal = { append: async () => undefined, read };
     const withoutCwd = makeHarness();
-    await createRunner({ ...withoutCwd.deps, journal }).run({ prompt: "fresh" });
+    await createRunner({ ...withoutCwd.deps, journal }).run({ prompt: "fresh", continuityWorkspaceDir: WORKSPACE });
     expect(read).not.toHaveBeenCalled();
     expect(argValue(withoutCwd.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
+
+    const inferredOnly = makeHarness();
+    await createRunner({ ...inferredOnly.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE });
+    expect(read).not.toHaveBeenCalled();
+    expect(argValue(inferredOnly.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBeUndefined();
   });
 
   it("does not read continuity when the kill switch is disabled", async () => {
@@ -473,7 +478,7 @@ describe("createRunner", () => {
     const journal: Journal = { append: async () => undefined, read };
     const harness = makeHarness({ CLAUDE_CONSULT_CONTINUITY: "0" });
 
-    await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+    await createRunner({ ...harness.deps, journal }).run({ prompt: "fresh", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
 
     expect(read).not.toHaveBeenCalled();
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
@@ -483,7 +488,7 @@ describe("createRunner", () => {
     const journal: Journal = { append: async () => undefined, read: async () => { throw new Error("disk unavailable"); } };
     const harness = makeHarness();
 
-    await expect(createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" })).resolves.toMatchObject({ sessionId: SESSION_ID });
+    await expect(createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" })).resolves.toMatchObject({ sessionId: SESSION_ID });
 
     expect(harness.spawnRequests).toHaveLength(1);
     expect(harness.spawnRequests[0]?.prompt).toBe("user payload");
@@ -495,7 +500,7 @@ describe("createRunner", () => {
     const journal: Journal = { append: async () => undefined, read: async () => [malformed] };
     const harness = makeHarness();
 
-    await createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+    await createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
 
     expect(harness.spawnRequests).toHaveLength(1);
     expect(argValue(harness.spawnRequests[0]?.args ?? [], "--append-system-prompt")).toBe("existing");
@@ -506,9 +511,11 @@ describe("createRunner", () => {
     try {
       const journal: Journal = { append: async () => undefined, read: async () => new Promise<readonly JournalEntry[]>(() => undefined) };
       const harness = makeHarness();
-      const pending = createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, appendSystemPrompt: "existing" });
+      const pending = createRunner({ ...harness.deps, journal }).run({ prompt: "user payload", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, appendSystemPrompt: "existing" });
 
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(LIMITS.continuityReadTimeoutMs - 1);
+      expect(harness.spawnRequests).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(harness.spawnRequests).toHaveLength(1);
       await expect(pending).resolves.toMatchObject({ sessionId: SESSION_ID });
@@ -524,9 +531,9 @@ describe("createRunner", () => {
     const harness = makeHarness();
     const runner = createRunner({ ...harness.deps, journal });
 
-    await expectCode(runner.run({ prompt: "deep", cwd: WORKSPACE, depth: "deep" }), "INVALID_INPUT");
-    await expectCode(runner.run({ prompt: "schema", cwd: WORKSPACE, jsonSchema: "not json" }), "INVALID_INPUT");
-    await expectCode(runner.run({ prompt: "directory", cwd: WORKSPACE, addDirs: ["relative"] }), "INVALID_INPUT");
+    await expectCode(runner.run({ prompt: "deep", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, depth: "deep" }), "INVALID_INPUT");
+    await expectCode(runner.run({ prompt: "schema", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, jsonSchema: "not json" }), "INVALID_INPUT");
+    await expectCode(runner.run({ prompt: "directory", cwd: WORKSPACE, continuityWorkspaceDir: WORKSPACE, addDirs: ["relative"] }), "INVALID_INPUT");
 
     expect(read).not.toHaveBeenCalled();
   });

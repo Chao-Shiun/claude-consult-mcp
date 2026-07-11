@@ -135,6 +135,7 @@ describe("claude_panel tool", () => {
     for (const request of requests) {
       expect(request.addDirs).toEqual([base, subDir]);
       expect(request.cwd).toBe(base);
+      expect(request.continuityWorkspaceDir).toBeUndefined();
       expect(request.prompt).toContain(fileA);
       expect(request.prompt).toContain(subDir);
       expect(request.prompt).toContain("Read and analyze the following paths from disk before answering.");

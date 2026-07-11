@@ -77,6 +77,7 @@ export function createPanelTool(toolContext: ToolContext): ConsultTool {
         appendSystemPrompt: composeAdvisorPrompt(LENS_PROMPTS[perspective]),
         addDirs: analysis?.dirs ?? [],
         cwd: analysis?.cwd ?? args.workspace_dir,
+        continuityWorkspaceDir: args.workspace_dir,
         model: args.model,
         effort: args.effort,
         signal: extra?.signal,

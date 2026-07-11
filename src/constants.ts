@@ -78,7 +78,8 @@ export const LIMITS = deepFreeze({
   gateStdinMaxBytes: 256 * 1024,
   gateStdinTimeoutMs: 1000,
   gateClaimMaxBytes: 4 * 1024,
-  continuityEntries: 5
+  continuityEntries: 5,
+  continuityReadTimeoutMs: 250
 });
 
 export const CAPABILITY_TOOLS: Readonly<Record<Capability, readonly string[]>> = deepFreeze({
